@@ -759,3 +759,45 @@ def print_data_summary(spike_data: pd.DataFrame, electrode_config: pd.DataFrame 
     
     if electrode_config is not None:
         print(f"  • Electrode configuration loaded: {len(electrode_config)} electrodes")
+
+
+def adjust_spike_times(input_file: str = "spikes_zeroing.csv", output_file: str = "spikes_time_adjusted.csv") -> pd.DataFrame:
+    """
+    Adjust spike times by multiplying the first column by 30,000 and rounding to whole numbers.
+    
+    Parameters:
+    -----------
+    input_file : str, default "spikes_zeroing.csv"
+        Path to input CSV file containing spike data
+    output_file : str, default "spikes_time_adjusted.csv"
+        Path to output CSV file for adjusted spike data
+        
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with adjusted spike times
+    """
+    try:
+        # Read the CSV file
+        print(f"Reading spike data from {input_file}...")
+        df = pd.read_csv(input_file, header=None, names=['time', 'unit', 'electrode'], skipinitialspace=True)
+        
+        # Multiply first column by 30,000 and round to closest whole number
+        print("Adjusting spike times (multiplying by 30,000 and rounding)...")
+        df['time'] = np.round(df['time'] * 30000).astype(int)
+        
+        # Save to output file
+        print(f"Saving adjusted data to {output_file}...")
+        df.to_csv(output_file, index=False, header=False)
+        
+        print(f"Successfully processed {len(df)} spike records")
+        print(f"Time range: {df['time'].min()} to {df['time'].max()}")
+        
+        return df
+        
+    except FileNotFoundError:
+        print(f"Error: Could not find input file '{input_file}'")
+        raise
+    except Exception as e:
+        print(f"Error processing spike data: {str(e)}")
+        raise
