@@ -169,25 +169,23 @@ class PSTHAnalyzer:
         """
         if unit not in self.psth_data:
             raise ValueError(f"Unit {unit} not found in PSTH data. Run compute_psth first.")
-            
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
+        
         data = self.psth_data[unit]
         
+        # Calculate average stimulus duration from intervals
+        interval_durations = self.intervals_df['End'] - self.intervals_df['Start']
+        avg_stimulus_duration = interval_durations.mean()
+        
         if show_raster and len(data['raw_spikes']) > 0:
-            # Create subplot for raster
-            fig = ax.get_figure()
-            gs = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0.1)
-            
-            # Raster plot
-            ax_raster = fig.add_subplot(gs[0])
+            # Create figure with subplots for raster and PSTH
+            fig, (ax_raster, ax_psth) = plt.subplots(2, 1, figsize=(12, 8), 
+                                                    height_ratios=[1, 2], 
+                                                    sharex=True)
             
             # Sample a subset of intervals for raster (to avoid overcrowding)
             max_trials = 50
             intervals_to_plot = min(max_trials, data['valid_intervals'])
             
-            trial_spikes = []
             current_trial = 0
             
             for _, interval in self.intervals_df.iterrows():
@@ -195,33 +193,53 @@ class PSTHAnalyzer:
                     break
                     
                 interval_start = interval['Start']
+                interval_duration = interval['End'] - interval['Start']
                 unit_spikes = self.spikes_df[self.spikes_df['unit'] == unit]['time'].values
                 
+                # Use the actual analysis window from bin_centers
+                window_start = data['bin_centers'][0]
+                window_end = data['bin_centers'][-1]
+                
                 window_spikes = unit_spikes[
-                    (unit_spikes >= interval_start - 1000) &
-                    (unit_spikes <= interval_start + 2000)
+                    (unit_spikes >= interval_start + window_start) &
+                    (unit_spikes <= interval_start + window_end)
                 ]
                 
                 if len(window_spikes) > 0:
                     aligned_spikes = window_spikes - interval_start
                     ax_raster.scatter(aligned_spikes, [current_trial] * len(aligned_spikes), 
-                                    s=1, c='black', alpha=0.6)
+                                    s=1, c='black', alpha=0.7)
                     current_trial += 1
             
+            # Add stimulus period highlighting to raster
+            ax_raster.axvspan(0, avg_stimulus_duration, alpha=0.2, color='red', 
+                            label=f'Stimulus ({avg_stimulus_duration:.0f}ms)')
             ax_raster.set_xlim(data['bin_centers'][0], data['bin_centers'][-1])
-            ax_raster.set_ylabel('Trial')
-            ax_raster.set_title(f'Unit {unit} - Raster Plot')
-            ax_raster.axvline(x=0, color='red', linestyle='--', alpha=0.7)
+            ax_raster.set_ylabel('Trial #')
+            ax_raster.set_title(f'Unit {unit} - Raster Plot ({current_trial} trials)')
+            ax_raster.grid(True, alpha=0.3)
+            ax_raster.legend()
             
-            # PSTH plot
-            ax = fig.add_subplot(gs[1])
+            # Use the PSTH subplot
+            ax = ax_psth
+        else:
+            # Create single plot if no raster
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(12, 6))
         
         # Plot PSTH
         ax.plot(data['bin_centers'], data['firing_rate'], 'b-', linewidth=2)
         ax.fill_between(data['bin_centers'], data['firing_rate'], alpha=0.3)
         
-        ax.axvline(x=0, color='red', linestyle='--', alpha=0.7, label='Stimulus onset')
-        ax.set_xlabel('Time (ms)')
+        # Add stimulus period as highlighted region instead of just onset line
+        ax.axvspan(0, avg_stimulus_duration, alpha=0.2, color='red', 
+                  label=f'Stimulus period ({avg_stimulus_duration:.0f}ms)')
+        
+        # Add onset and offset lines for clarity
+        ax.axvline(x=0, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        ax.axvline(x=avg_stimulus_duration, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        
+        ax.set_xlabel('Time relative to stimulus onset (ms)')
         ax.set_ylabel('Firing rate (spikes/s)')
         ax.set_title(f'Unit {unit} - PSTH ({data["valid_intervals"]} trials, {data["total_spikes"]} spikes)')
         ax.grid(True, alpha=0.3)
@@ -259,6 +277,10 @@ class PSTHAnalyzer:
         if nrows == 1:
             axes = axes.reshape(1, -1)
         
+        # Calculate average stimulus duration
+        interval_durations = self.intervals_df['End'] - self.intervals_df['Start']
+        avg_stimulus_duration = interval_durations.mean()
+        
         for i, unit in enumerate(units):
             row, col = i // ncols, i % ncols
             ax = axes[row, col]
@@ -267,7 +289,11 @@ class PSTHAnalyzer:
                 data = self.psth_data[unit]
                 ax.plot(data['bin_centers'], data['firing_rate'], 'b-', linewidth=1.5)
                 ax.fill_between(data['bin_centers'], data['firing_rate'], alpha=0.3)
-                ax.axvline(x=0, color='red', linestyle='--', alpha=0.7)
+                
+                # Add stimulus period highlighting
+                ax.axvspan(0, avg_stimulus_duration, alpha=0.2, color='red')
+                ax.axvline(x=0, color='red', linestyle='--', alpha=0.7, linewidth=0.8)
+                ax.axvline(x=avg_stimulus_duration, color='red', linestyle='--', alpha=0.7, linewidth=0.8)
                 
                 title = f'Unit {unit}'
                 if show_statistics:
@@ -326,6 +352,10 @@ class PSTHAnalyzer:
             pop_rate = np.sum(all_rates, axis=0)
             sem = None
         
+        # Calculate average stimulus duration
+        interval_durations = self.intervals_df['End'] - self.intervals_df['Start']
+        avg_stimulus_duration = interval_durations.mean()
+        
         fig, ax = plt.subplots(figsize=(12, 6))
         
         ax.plot(bin_centers, pop_rate, 'b-', linewidth=2, label=f'Population {method}')
@@ -334,8 +364,15 @@ class PSTHAnalyzer:
             ax.fill_between(bin_centers, pop_rate - sem, pop_rate + sem, 
                           alpha=0.3, label='SEM')
         
-        ax.axvline(x=0, color='red', linestyle='--', alpha=0.7, label='Stimulus onset')
-        ax.set_xlabel('Time (ms)')
+        # Add stimulus period as highlighted region
+        ax.axvspan(0, avg_stimulus_duration, alpha=0.2, color='red', 
+                  label=f'Stimulus period ({avg_stimulus_duration:.0f}ms)')
+        
+        # Add onset and offset lines
+        ax.axvline(x=0, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        ax.axvline(x=avg_stimulus_duration, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        
+        ax.set_xlabel('Time relative to stimulus onset (ms)')
         ax.set_ylabel('Firing rate (spikes/s)')
         ax.set_title(f'Population PSTH ({len(units)} units)')
         ax.grid(True, alpha=0.3)
@@ -422,13 +459,22 @@ class PSTHAnalyzer:
         """
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
         
+        # Calculate average stimulus duration
+        interval_durations = self.intervals_df['End'] - self.intervals_df['Start']
+        avg_stimulus_duration = interval_durations.mean()
+        
         # 1. Individual channel PSTHs
         ax1 = axes[0, 0]
         for channel, data in channel_data.items():
             ax1.plot(data['bin_centers'], data['firing_rate'], 
                     label=f'Ch {channel} ({data["n_units"]} units)', alpha=0.7)
         
-        ax1.axvline(x=0, color='red', linestyle='--', alpha=0.7)
+        # Add stimulus period highlighting
+        ax1.axvspan(0, avg_stimulus_duration, alpha=0.2, color='red', 
+                   label=f'Stimulus ({avg_stimulus_duration:.0f}ms)')
+        ax1.axvline(x=0, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        ax1.axvline(x=avg_stimulus_duration, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        
         ax1.set_xlabel('Time (ms)')
         ax1.set_ylabel('Firing rate (spikes/s)')
         ax1.set_title('PSTH by Channel')
