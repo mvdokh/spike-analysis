@@ -141,16 +141,16 @@ def compute_session_metrics(df, folder_name):
     }
 
 
-def load_all_sessions(base_dir, use_filtered=False):
+def load_all_sessions(base_dir, suffix='100_3_behavior'):
     """
-    Load all behavior.csv or behavior_filtered.csv files from session folders.
+    Load all CSV files with the specified suffix from session folders.
     
     Parameters:
     -----------
     base_dir : str
         Path to the directory containing session folders
-    use_filtered : bool
-        If True, use behavior_filtered.csv; otherwise use behavior.csv
+    suffix : str
+        The suffix pattern to match (e.g., '100_3_behavior' will match *100_3_behavior.csv)
     
     Returns:
     --------
@@ -159,23 +159,23 @@ def load_all_sessions(base_dir, use_filtered=False):
     base_path = Path(base_dir)
     all_metrics = []
     
-    # Choose which file to look for
-    filename = 'behavior_filtered.csv' if use_filtered else 'behavior.csv'
-    
     # Iterate through all subdirectories
     for folder in sorted(base_path.iterdir()):
         if folder.is_dir():
-            behavior_file = folder / filename
-            if behavior_file.exists():
+            # Find all CSV files with the specified suffix
+            matching_files = list(folder.glob(f'*{suffix}.csv'))
+            
+            if matching_files:
+                behavior_file = matching_files[0]  # Use the first match
                 try:
                     df = pd.read_csv(behavior_file)
                     metrics = compute_session_metrics(df, folder.name)
                     all_metrics.append(metrics)
-                    print(f"Processed: {folder.name}")
+                    print(f"Processed: {folder.name} ({behavior_file.name})")
                 except Exception as e:
                     print(f"Error processing {folder.name}: {e}")
             else:
-                print(f"No {filename} found in {folder.name}")
+                print(f"No file matching '*{suffix}.csv' found in {folder.name}")
     
     return all_metrics
 
@@ -469,7 +469,7 @@ def create_plots(metrics_df, output_dir):
     print("Saved: summary_all_metrics plots")
 
 
-def main(base_dir, output_dir=None, use_filtered=False):
+def main(base_dir, output_dir=None, suffix='100_3_behavior'):
     """
     Main analysis pipeline.
     
@@ -479,15 +479,15 @@ def main(base_dir, output_dir=None, use_filtered=False):
         Path to directory containing session folders
     output_dir : str, optional
         Path to save results. If None, creates 'results' in current directory
-    use_filtered : bool
-        If True, use behavior_filtered.csv; otherwise use behavior.csv
+    suffix : str
+        The suffix pattern to match in CSV filenames (e.g., '100_3_behavior')
     """
     # Load all sessions
     print(f"\nScanning directory: {base_dir}")
-    print(f"Using: {'behavior_filtered.csv' if use_filtered else 'behavior.csv'}")
+    print(f"Looking for files matching: *{suffix}.csv")
     print("=" * 60)
     
-    all_metrics = load_all_sessions(base_dir, use_filtered)
+    all_metrics = load_all_sessions(base_dir, suffix)
     
     if not all_metrics:
         print("No sessions found!")
@@ -541,17 +541,17 @@ def main(base_dir, output_dir=None, use_filtered=False):
 if __name__ == "__main__":
     import sys
     
-    # Check if --filtered flag is provided
-    use_filtered_files = '--filtered' in sys.argv
-    
-    # Get directory path (ignore --filtered flag if present)
-    args = [arg for arg in sys.argv[1:] if arg != '--filtered']
+    # Get directory path and optional suffix
+    args = sys.argv[1:]
     
     if len(args) > 0:
         base_directory = args[0]
     else:
         # Default to the Phox2B#8SFC directory
-        base_directory = r"C:\Users\wanglab\Desktop\Phox2B#8SFC"
+        base_directory = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\TeNT_1110\Phox2B#8_side_all"
+    
+    # Optional: specify custom suffix as second argument
+    suffix = args[1] if len(args) > 1 else '100_3_behavior'
     
     # Run analysis
-    main(base_directory, use_filtered=use_filtered_files)
+    main(base_directory, suffix=suffix)
