@@ -547,8 +547,8 @@ if __name__ == "__main__":
     if len(args) > 0:
         base_directory = args[0]
     else:
-        # Default to the Phox2B#8SFC directory
-        base_directory = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\TeNT_1110\Phox2B#8_side_all"
+        # Default 
+        base_directory = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\TeNT_1110\Phox2B#9_side_all"
     
     # Optional: specify custom suffix as second argument
     suffix = args[1] if len(args) > 1 else '100_3_behavior'

@@ -28,8 +28,8 @@ class BehaviorAnalyzer:
         """
         self.base_dir = Path(base_dir)
         self.sessions_data = []
-        self.output_dir = Path("/home/wanglab/spike-analysis/LICKING/OUTPUT")
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir = Path(r"C:\Users\wanglab\Desktop\licking-and-spike-analysis\Output\Licking_Behavior")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.frame_counts = {}  # Store frame counts for each session
         
     def parse_session_name(self, folder_name):
@@ -844,8 +844,8 @@ def main():
     """
     Main function to run the analysis
     """
-    # Set the base directory (WSL path)
-    base_dir = "/mnt/c/Users/wanglab/Desktop/IRt.PCRt-1125/TeNT_1110/Phox2B#8_side_all"
+    # Set the base directory
+    base_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\TeNT_1110\Phox2B#9_side_all"
     
     # Check if directory exists
     if not os.path.exists(base_dir):

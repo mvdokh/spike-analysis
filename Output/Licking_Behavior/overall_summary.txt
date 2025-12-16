@@ -1,0 +1,13 @@
+=== BEHAVIOR ANALYSIS SUMMARY ===
+
+total_sessions: 39.00
+total_licks: 3303.00
+total_bouts: 745.00
+mean_licks_per_session: 84.69
+mean_bouts_per_session: 19.10
+mean_licks_per_bout: 4.43
+median_licks_per_bout: 3.00
+mean_max_area: 1345.75
+median_max_area: 1178.00
+mean_lick_duration: 15.17
+mean_bout_duration: 67.28
