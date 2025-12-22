@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import os
 
 # Set paths
-video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_01_2025_04251"
-video_path = os.path.join(video_dir, "IRt_01_2025_04251.mp4")
-csv_path = os.path.join(video_dir, "IRt_01_2025_04251_jaw.csv")
+video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_02_2025_04251"
+video_path = os.path.join(video_dir, "IRt_02_2025_04251.mp4")
+csv_path = os.path.join(video_dir, "IRt_02_2025_04251_jaw.csv")
 
 
 # Load jaw keypoints CSV (handle space or comma delimited)
@@ -81,7 +81,7 @@ frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 # Plot and save (overlay mean keypoint without scaling)
 plt.figure(figsize=(6, 6))
 plt.imshow(frame_rgb)
-plt.scatter([baseline_y], [baseline_x], c='red', s=80, label='Baseline')
+plt.scatter([baseline_x], [baseline_y], c='red', s=80, label='Baseline')
 plt.legend()
 plt.title('Baseline Jaw Position on Sample Frame')
 plt.axis('off')
