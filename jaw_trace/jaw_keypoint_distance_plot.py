@@ -22,8 +22,8 @@ def gh_filter(z, x0, dx, g, h):
     return np.array(result)
 
 # Set paths
-video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_01_2025_0425"
-csv_path = os.path.join(video_dir, "IRt_01_2025_0425_jaw.csv")
+video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_01_2025_04251"
+csv_path = os.path.join(video_dir, "IRt_01_2025_04251_jaw.csv")
 
 # Load jaw keypoints CSV (handle space or comma delimited)
 try:
@@ -42,22 +42,41 @@ if 'x' in cols and 'y' in cols:
 else:
     raise ValueError("CSV must contain 'x' and 'y' columns (case-insensitive). Found columns: {}".format(jaw_df.columns.tolist()))
 
+
 # Calculate distance of each keypoint from the mean (using provided reference)
-ref_x = 169.2
-ref_y = 172.35
+ref_x = 117.35
+ref_y = 178.89
 distances = np.sqrt((x - ref_x) ** 2 + (y - ref_y) ** 2)
+
+# Compute frame-to-frame movement distances
+frame_movements = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+move_mean = frame_movements.mean()
+move_std = frame_movements.std()
+outlier_thresh = move_mean + 3 * move_std
+outlier_mask = np.insert(frame_movements > outlier_thresh, 0, False)  # Insert False for first frame
+
+# Mask outliers in the distance plot
+distances_filtered = distances.copy()
+distances_filtered[outlier_mask] = np.nan
 
 # Plot distance vs frame for only the first 10,000 frames and save as SVG
 # Set frame range for plotting
-start_frame = 20000    # inclusive
-end_frame = 22000  # exclusive
 
-plot_indices = jaw_df.index[start_frame:end_frame]
-plot_distances = distances[start_frame:end_frame]
+start_frame = 44400    # inclusive
+end_frame = 46250  # exclusive
 
-# Apply g-h filter to the distances
-g = 0.2  # gain for value
-h = 0.02 # gain for derivative
+# Only include non-outlier frames in the plot
+frame_range = np.arange(start_frame, end_frame)
+non_outlier_mask = ~outlier_mask[start_frame:end_frame]
+plot_indices = jaw_df.index[start_frame:end_frame][non_outlier_mask]
+plot_distances = distances[start_frame:end_frame][non_outlier_mask]
+
+
+g = 0.05  # gain for value (lower for smoother)
+h = 0.005 # gain for derivative (lower for smoother)
+x0 = plot_distances.iloc[0] if len(plot_distances) > 0 else 0
+dx0 = 0
+smoothed = gh_filter(plot_distances, x0, dx0, g, h)
 x0 = plot_distances.iloc[0] if len(plot_distances) > 0 else 0
 dx0 = 0
 smoothed = gh_filter(plot_distances, x0, dx0, g, h)
@@ -67,9 +86,9 @@ plt.plot(plot_indices, plot_distances, marker='o', linestyle='-', color='blue', 
 plt.plot(plot_indices, smoothed, color='red', linewidth=2, label='g-h Smoothed')
 plt.xlabel('Frame')
 plt.ylabel('Distance from Reference Keypoint')
-plt.title('Distance of Jaw Keypoint from Reference (x=169.2, y=172.35) - Frames 20000 to 22000')
+plt.title('Distance of Jaw Keypoint from Reference')
 plt.legend()
 plt.tight_layout()
-svg_output_path = os.path.join(os.path.dirname(__file__), 'jaw_keypoint_distances_20000_22000.svg')
+svg_output_path = os.path.join(os.path.dirname(__file__), 'jaw_keypoint_distances.svg')
 plt.savefig(svg_output_path, format='svg')
 print(f"Saved distance plot to {svg_output_path}")

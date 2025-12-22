@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import os
 
 # Set paths
-video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_01_2025_0425"
-video_path = os.path.join(video_dir, "IRt_01_2025_0425.mp4")
-csv_path = os.path.join(video_dir, "IRt_01_2025_0425_jaw.csv")
+video_dir = r"C:\Users\wanglab\Desktop\IRt.PCRt-1125\IRt_114\IRt_01_2025_04251"
+video_path = os.path.join(video_dir, "IRt_01_2025_04251.mp4")
+csv_path = os.path.join(video_dir, "IRt_01_2025_04251_jaw.csv")
 
 
 # Load jaw keypoints CSV (handle space or comma delimited)
@@ -53,10 +53,17 @@ print(f"Original frame size: width={orig_w}, height={orig_h}")
 print("First 5 original keypoints (x, y):", list(zip(x[:5], y[:5])))
 
 
+
 # Calculate baseline (mean) position in original coordinates
-baseline_x = x.mean()
-baseline_y = y.mean()
-print(f"Baseline (mean) in original coords: x={baseline_x:.2f}, y={baseline_y:.2f}")
+baseline_x_orig = x.mean()
+baseline_y_orig = y.mean()
+print(f"Baseline (mean) in original coords: x={baseline_x_orig:.2f}, y={baseline_y_orig:.2f}")
+
+
+# Do not rescale; use mean keypoint directly
+baseline_x = baseline_x_orig
+baseline_y = baseline_y_orig
+print(f"Overlay baseline (no rescale): x={baseline_x:.2f}, y={baseline_y:.2f}")
 
 
 # Load video and grab a sample frame (first frame)
@@ -74,7 +81,7 @@ frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 # Plot and save (overlay mean keypoint without scaling)
 plt.figure(figsize=(6, 6))
 plt.imshow(frame_rgb)
-plt.scatter([baseline_x], [baseline_y], c='red', s=80, label='Baseline Jaw Position')
+plt.scatter([baseline_y], [baseline_x], c='red', s=80, label='Baseline')
 plt.legend()
 plt.title('Baseline Jaw Position on Sample Frame')
 plt.axis('off')
