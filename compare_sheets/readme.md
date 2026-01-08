@@ -1,0 +1,15 @@
+C:\Users\wanglab\Desktop\PCRt_TeLC\Phox2b#38
+0307_1/phox2b38_20240307_side_100_3_behavior
+0318_1/phox2b38_20240318_side_100_3_behavior
+0319_1/phox2b38_20240319_side_100_3_behavior
+0320_1/phox2b38_20240320_side_100_3_behavior
+0321_1/phox2b38_20240321_side_100_3_behavior
+0322_1/phox2b38_20240322_side_100_3_behavior
+
+C:\Users\wanglab\Desktop\PCRt_TeLC\Phox2b#38_1230_weights
+0307_1/phox2b38_20240307_side_100_3_behavior
+0318_1/phox2b38_20240318_side_100_3_behavior
+0319_1/phox2b38_20240319_side_100_3_behavior
+0320_1/phox2b38_20240320_side_100_3_behavior
+0321_1/phox2b38_20240321_side_100_3_behavior
+0322_1/phox2b38_20240322_side_100_3_behavior
