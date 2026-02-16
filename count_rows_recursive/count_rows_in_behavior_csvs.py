@@ -43,7 +43,7 @@ def main():
     import re
 
     parser = argparse.ArgumentParser(description='Count rows in all *behavior.csv files recursively in a folder.')
-    parser.add_argument('--root', type=str, default=r'C:\Users\wanglab\Desktop\PCRt_TeLC', help='Root directory to search for behavior.csv files')
+    parser.add_argument('--root', type=str, default=r'C:\Users\wanglab\Desktop\IRt_Bipoles_1-20-26\TeLC', help='Root directory to search for behavior.csv files')
     parser.add_argument('--csv', type=str, default='behavior_csv_row_counts.csv', help='Output CSV file name (will be saved in script folder)')
     args = parser.parse_args()
 
@@ -161,7 +161,7 @@ def main():
     import matplotlib.pyplot as plt
     from collections import defaultdict
     parser = argparse.ArgumentParser(description='Count rows in all *behavior.csv files recursively in a folder.')
-    parser.add_argument('--root', type=str, default=r'C:\Users\wanglab\Desktop\PCRt_TeLC', help='Root directory to search for behavior.csv files')
+    parser.add_argument('--root', type=str, default=r'C:\Users\wanglab\Desktop\IRt_Bipoles_1-20-26\TeLC', help='Root directory to search for behavior.csv files')
     parser.add_argument('--csv', type=str, default='behavior_csv_row_counts.csv', help='Output CSV file name (will be saved in script folder)')
     args = parser.parse_args()
 
