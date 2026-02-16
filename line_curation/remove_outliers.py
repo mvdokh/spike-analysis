@@ -119,8 +119,11 @@ def main():
         print(f"Standard Deviation: {analog_clean['Data'].std():.4f}")
         print(f"Range: {analog_clean['Data'].max() - analog_clean['Data'].min():.4f}")
         
-        # Save the cleaned datasets
-        analog_clean.to_csv("analog_output_clean.csv", index=False)
+        # Save the cleaned datasets with fixed decimal formatting
+        # Format the Data column to 10 decimal places without scientific notation
+        analog_clean_formatted = analog_clean.copy()
+        analog_clean_formatted['Data'] = analog_clean_formatted['Data'].apply(lambda x: f"{x:.10f}")
+        analog_clean_formatted.to_csv("analog_output_clean.csv", index=False)
         lines_clean.to_csv("lines_output_clean.csv", index=False)
         
         print("\nCleaned files saved as:")
@@ -173,13 +176,13 @@ def main():
         except Exception as e:
             print(f"Warning: Could not create visualization: {e}")
         
-        # Save outlier summary
+        # Save outlier summary with proper formatting
         outlier_report = pd.DataFrame({
             'Time': outlier_times,
-            'Data': analog_data.loc[outlier_indices, 'Data'].values,
+            'Data': [f"{x:.10f}" for x in analog_data.loc[outlier_indices, 'Data'].values],
             'Method': 'IQR_1.5',
-            'Lower_Bound': lower_bound_iqr,
-            'Upper_Bound': upper_bound_iqr
+            'Lower_Bound': f"{lower_bound_iqr:.10f}",
+            'Upper_Bound': f"{upper_bound_iqr:.10f}"
         })
         outlier_report.to_csv("outliers_removed.csv", index=False)
         print("- outliers_removed.csv (summary of removed data points)")

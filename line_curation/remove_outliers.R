@@ -89,7 +89,9 @@ if (length(outlier_indices) > 0) {
   cat(sprintf("Median: %.4f\n", median(analog_clean$Data, na.rm = TRUE)))
   cat(sprintf("Standard Deviation: %.4f\n", sd(analog_clean$Data, na.rm = TRUE)))
   
-  # Save the cleaned datasets
+  # Save the cleaned datasets with fixed decimal formatting
+  # Format the Data column to 10 decimal places without scientific notation
+  analog_clean$Data <- sprintf("%.10f", analog_clean$Data)
   write_csv(analog_clean, "analog_output_clean.csv")
   write_csv(lines_clean, "lines_output_clean.csv")
   
