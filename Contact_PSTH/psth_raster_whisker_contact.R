@@ -65,9 +65,9 @@ raster_for_unit <- function(spikes, intervals, unit, t_pre = T_PRE, t_post = T_P
 }
 
 main <- function() {
-  base <- "/Users/martindokholyan/Desktop"
+  base <- "/Users/martindokholyan/Desktop/Plots/4"
   args <- commandArgs(trailingOnly = TRUE)
-  interval_path <- if (length(args) >= 1) args[1] else file.path(base, "interval_0_whisker_contact.csv")
+  interval_path <- if (length(args) >= 1) args[1] else file.path(base, "interval_4_whisker_contact.csv")
   spikes_path   <- if (length(args) >= 2) args[2] else file.path(base, "spikes.csv")
 
   intervals <- load_intervals(interval_path)
