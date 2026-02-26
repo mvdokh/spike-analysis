@@ -1,7 +1,7 @@
 from whiskertoolbox_python import DigitalIntervalSeries
 import math
 
-# Helper: compute squared distance
+# Helper: squared distance (faster than sqrt)
 def sq_dist(x1, y1, x2, y2):
     return (x1 - x2)**2 + (y1 - y2)**2
 
@@ -19,16 +19,15 @@ for i in range(5):
         print(f"Missing data for whisker {i}")
         continue
 
-    # Create output interval series
+    # Output interval series
     protraction_series = DigitalIntervalSeries()
     retraction_series = DigitalIntervalSeries()
 
-    # Iterate over intervals
+    # Iterate through intervals
     for interval in interval_data.toList():
         
-        contact_time = interval.start  # use start of interval
+        contact_time = interval.start  # classify at contact onset
         
-        # Get pole position at contact time
         pole_points = pole_data.getAtTime(contact_time)
         line_objects = line_data.getAtTime(contact_time)
         
@@ -38,7 +37,7 @@ for i in range(5):
         pole = pole_points[0]
         line = line_objects[0]
         
-        # Find closest point on line to pole
+        # Find closest point on whisker line to pole
         min_dist = float("inf")
         closest_point = None
         
@@ -51,15 +50,18 @@ for i in range(5):
         if closest_point is None:
             continue
         
-        # Classification rule
-        if closest_point.y < pole.y:
+        # ---- Corrected classification (image Y increases downward) ----
+        # larger Y = lower in image
+        if closest_point.y > pole.y:
+            # PROTRACTION
             protraction_series.addInterval(interval.start, interval.end)
-        elif closest_point.y > pole.y:
+        elif closest_point.y < pole.y:
+            # RETRACTION
             retraction_series.addInterval(interval.start, interval.end)
 
-    # Register new data
+    # Register results
     time_key = dm.getTimeKey(interval_key)
-    
+
     dm.setData(f"interval_{i}_shrunk_protraction",
                protraction_series,
                time_key)
@@ -70,4 +72,4 @@ for i in range(5):
 
     print(f"Finished whisker {i}")
 
-print("Done.")
+print("All whiskers processed.")
