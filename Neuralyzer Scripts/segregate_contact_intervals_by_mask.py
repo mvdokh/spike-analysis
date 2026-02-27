@@ -7,7 +7,7 @@ mask_keys = ["0", "1", "2", "3", "4"]
 masks = [dm.getData(key) for key in mask_keys]
 
 # Load pole position (PointData)
-pole = dm.getData("keypoint_1")
+pole = dm.getData("pole")
 
 # Load existing contact intervals
 all_intervals = dm.getData("interval_1")
