@@ -75,3 +75,7 @@ C:\Users\wanglab\Desktop\Tongue-Whisker-Analysis\Spike PSTH Pipeline\3_PSTH\digi
 Video frames → synced via TTL rising edges on channel 1 of digitalin.dat (each rising edge = one frame)
 Spike times → in seconds, referenced to the master clock (30kHz sample rate)
 Frame N maps to the Nth rising edge sample index, converted to seconds via sample_index / 30000
+
+'''
+python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102625_1"
+'''

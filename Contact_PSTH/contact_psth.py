@@ -172,7 +172,7 @@ def align_spikes_to_events(spike_times: np.ndarray,
     trials = []
     for start, end in zip(event_starts, event_ends):
         window_lo = start - pre_s
-        window_hi = end + post_s
+        window_hi = start + post_s
         mask = (spike_times >= window_lo) & (spike_times <= window_hi)
         relative_ms = (spike_times[mask] - start) * 1000.0  # ms from onset
         duration_ms = (end - start) * 1000.0
@@ -215,7 +215,7 @@ def create_psth_raster(trials, unit, event_label,
 
     # Time axis limits (relative to onset)
     t_min = -pre_ms
-    t_max = avg_dur + post_ms
+    t_max = post_ms
 
     bins = np.arange(t_min, t_max + bin_ms, bin_ms)
 
@@ -255,6 +255,12 @@ def create_psth_raster(trials, unit, event_label,
         if st:
             ax_raster.scatter(st, [trial_idx] * len(st),
                               s=1, color="black", alpha=0.8, marker="s")
+
+    # Offset line — each trial's duration plotted as a curve
+    offset_times = [t["duration_ms"] for t in sorted_trials]
+    ax_raster.plot(offset_times, range(len(sorted_trials)),
+                   color="red", linewidth=1, alpha=0.7, label="offset")
+
     ax_raster.axvline(0, color="black", ls="--", alpha=0.7)
     ax_raster.set_xlabel("Time from contact onset (ms)")
     ax_raster.set_ylabel("Trial")
@@ -271,7 +277,7 @@ def create_psth_raster(trials, unit, event_label,
 def run_pipeline(data_dir: str,
                  contact_dir: str | None = None,
                  output_dir: str | None = None,
-                 pre_ms: float = 100.0,
+                 pre_ms: float = 50.0,
                  post_ms: float = 100.0,
                  bin_ms: float = 1.0,
                  smooth: int = 5,
@@ -430,7 +436,7 @@ Example:
     parser.add_argument("--pre_ms", type=float, default=50,
                         help="Window before event onset in ms (default: 50)")
     parser.add_argument("--post_ms", type=float, default=100,
-                        help="Window after event offset in ms (default: 100)")
+                        help="Window after event onset in ms (default: 100)")
     parser.add_argument("--bin_ms", type=float, default=1,
                         help="PSTH bin width in ms (default: 1)")
     parser.add_argument("--smooth", type=int, default=5,
