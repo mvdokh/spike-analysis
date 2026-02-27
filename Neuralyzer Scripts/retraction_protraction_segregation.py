@@ -1,7 +1,6 @@
 from whiskertoolbox_python import DigitalIntervalSeries
 import math
 
-# Helper: squared distance (faster than sqrt)
 def sq_dist(x1, y1, x2, y2):
     return (x1 - x2)**2 + (y1 - y2)**2
 
