@@ -1,7 +1,7 @@
 from whiskertoolbox_python import Interval, DigitalIntervalSeries, Point2D
 
 # Names of your mask data
-mask_keys = ["0", "1", "2", "3", "4"]
+mask_keys = ["0", "1", "2", "3"]
 
 # Load MaskData
 masks = [dm.getData(key) for key in mask_keys]
