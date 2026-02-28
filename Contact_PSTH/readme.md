@@ -79,3 +79,19 @@ Frame N maps to the Nth rising edge sample index, converted to seconds via sampl
 '''
 python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102625_1"
 '''
+
+
+
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact_retraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact_protraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact_retraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_2_mask_contact.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_2_mask_contact_protraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_2_mask_contact_retraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_3_mask_contact.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_3_mask_contact_protraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_3_mask_contact_retraction.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\contact_intervals.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact.csv"
+"C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact_protraction.csv"
