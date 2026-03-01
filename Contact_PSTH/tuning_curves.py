@@ -6,8 +6,9 @@ show each unit's response magnitude across whiskers.
 
 For each unit, produces a single figure with:
     - Top row:    Tuning curves (mean evoked FR vs whisker) for All / Retraction
-                  / Protraction, with baseline subtracted.  Error bars show SEM
-                  across time bins in the response window.
+                  / Protraction, with baseline subtracted.  Error bars show 95%
+                  bootstrap confidence intervals (1000 resamples of time bins
+                  in the response window).
     - Bottom row: Overlaid PSTH traces for all whiskers (direction = all),
                   so the temporal profile can be compared alongside the
                   tuning curve.
@@ -55,12 +56,32 @@ def _parse_interval_name(name: str):
     return (None, "unknown")
 
 
+def _bootstrap_ci(values, n_boot=1000, ci=95, rng=None):
+    """
+    Bootstrap confidence interval for the mean of *values*.
+
+    Returns (ci_lo, ci_hi) — absolute values, NOT offsets from the mean.
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+    if len(values) == 0:
+        return 0.0, 0.0
+    boot_means = np.empty(n_boot)
+    n = len(values)
+    for i in range(n_boot):
+        boot_means[i] = rng.choice(values, size=n, replace=True).mean()
+    alpha = (100 - ci) / 2
+    return float(np.percentile(boot_means, alpha)), float(np.percentile(boot_means, 100 - alpha))
+
+
 def _evoked_fr(fr_vals, bin_vals, baseline_window=(-50, 0),
                response_window=(0, 50)):
     """
     Compute baseline-subtracted mean firing rate in the response window.
 
-    Returns (evoked_mean, evoked_sem, baseline_mean).
+    Returns (evoked_mean, evoked_sem, baseline_mean, ci_lo, ci_hi).
+    ci_lo / ci_hi are 95 % bootstrap confidence‐interval bounds for
+    the baseline-subtracted mean.
     """
     bl_mask = (bin_vals >= baseline_window[0]) & (bin_vals < baseline_window[1])
     resp_mask = (bin_vals >= response_window[0]) & (bin_vals < response_window[1])
@@ -70,10 +91,13 @@ def _evoked_fr(fr_vals, bin_vals, baseline_window=(-50, 0),
     if resp_bins.size > 0:
         evoked_mean = resp_bins.mean() - baseline
         evoked_sem = resp_bins.std() / np.sqrt(resp_bins.size)
+        # Bootstrap on the baseline-subtracted response bins
+        ci_lo, ci_hi = _bootstrap_ci(resp_bins - baseline)
     else:
         evoked_mean = 0.0
         evoked_sem = 0.0
-    return evoked_mean, evoked_sem, baseline
+        ci_lo, ci_hi = 0.0, 0.0
+    return evoked_mean, evoked_sem, baseline, ci_lo, ci_hi
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -95,7 +119,7 @@ def build_tuning_data(df: pd.DataFrame):
         fr = grp["firing_rate_hz"].values
         n_trials = int(grp["n_trials"].iloc[0]) if "n_trials" in grp.columns else np.nan
 
-        evoked, sem, baseline = _evoked_fr(fr, bins)
+        evoked, sem, baseline, ci_lo, ci_hi = _evoked_fr(fr, bins)
 
         # Peak in response window
         resp_mask = (bins >= 0) & (bins < 100)
@@ -116,6 +140,8 @@ def build_tuning_data(df: pd.DataFrame):
             "n_trials": n_trials,
             "evoked_fr": evoked,
             "evoked_sem": sem,
+            "ci_lo": ci_lo,
+            "ci_hi": ci_hi,
             "baseline_fr": baseline,
             "peak_fr": peak_fr,
             "peak_latency_ms": peak_lat,
@@ -168,25 +194,31 @@ def plot_unit_tuning(unit, df_raw, tuning, whiskers, out_dir):
     }
 
     for direction, style in dir_styles.items():
-        means, sems, n_trials_list = [], [], []
+        means, ci_los, ci_his, n_trials_list = [], [], [], []
         for w in whiskers:
             row = tuning[(tuning["unit"] == unit) &
                          (tuning["whisker"] == w) &
                          (tuning["direction"] == direction)]
             if len(row) > 0:
                 means.append(row["evoked_fr"].values[0])
-                sems.append(row["evoked_sem"].values[0])
+                ci_los.append(row["ci_lo"].values[0])
+                ci_his.append(row["ci_hi"].values[0])
                 nt = row["n_trials"].values[0]
                 n_trials_list.append(int(nt) if not np.isnan(nt) else 0)
             else:
                 means.append(0.0)
-                sems.append(0.0)
+                ci_los.append(0.0)
+                ci_his.append(0.0)
                 n_trials_list.append(0)
 
         means = np.array(means)
-        sems = np.array(sems)
+        ci_los = np.array(ci_los)
+        ci_his = np.array(ci_his)
+        # Asymmetric error bars: distance from mean to each CI bound
+        yerr_lo = np.clip(means - ci_los, 0, None)
+        yerr_hi = np.clip(ci_his - means, 0, None)
         label = direction.capitalize()
-        ax.errorbar(x, means, yerr=sems, label=label, capsize=3,
+        ax.errorbar(x, means, yerr=[yerr_lo, yerr_hi], label=label, capsize=3,
                     **style)
 
     # Annotate trial counts (from direction=all)
