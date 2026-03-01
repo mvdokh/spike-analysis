@@ -37,7 +37,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from scipy import stats
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -149,7 +148,8 @@ def compute_unit_profiles(wr: pd.DataFrame) -> pd.DataFrame:
         - classification: strongly_directional, weakly_directional, non_directional
     """
     units = sorted(wr["unit"].unique())
-    whiskers = sorted([w for w in wr["whisker"].unique() if w is not None])
+    whiskers = sorted([int(w) for w in wr["whisker"].unique()
+                       if w is not None and not (isinstance(w, float) and np.isnan(w))])
     profiles = []
 
     for unit in units:
@@ -286,71 +286,6 @@ def compute_unit_profiles(wr: pd.DataFrame) -> pd.DataFrame:
 # Figures
 # ──────────────────────────────────────────────────────────────────────────────
 
-def plot_summary(profiles: pd.DataFrame, wr: pd.DataFrame, out_dir: str):
-    """4-panel overview: best-whisker histogram, DSI distribution,
-    latency distribution, transient/sustained scatter."""
-
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle("Unit Profile Summary", fontsize=14, fontweight="bold")
-
-    # 1) Best whisker histogram
-    ax = axes[0, 0]
-    bw = profiles["best_whisker"].dropna().astype(int)
-    if len(bw) > 0:
-        bw.value_counts().sort_index().plot.bar(ax=ax, color="steelblue",
-                                                 edgecolor="black")
-    ax.set_xlabel("Whisker ID")
-    ax.set_ylabel("# Units")
-    ax.set_title("Best Whisker Distribution")
-
-    # 2) DSI distribution (best whisker — raw vs adjusted)
-    ax = axes[0, 1]
-    dsi_raw = profiles["best_whisker_dsi_raw"].dropna()
-    dsi_adj = profiles["best_whisker_dsi_adj"].dropna()
-    bins_dsi = np.linspace(-1, 1, 21)
-    ax.hist(dsi_raw, bins=bins_dsi, color="salmon", edgecolor="black",
-            alpha=0.4, label="Raw DSI")
-    ax.hist(dsi_adj, bins=bins_dsi, color="steelblue", edgecolor="black",
-            alpha=0.6, label="Adjusted DSI")
-    ax.axvline(0, color="black", ls="--", alpha=0.5)
-    ax.set_xlabel("DSI  (>0 = retraction)")
-    ax.set_ylabel("# Units")
-    ax.set_title("Direction Selectivity Index (Best Whisker)")
-    ax.legend(fontsize=7)
-
-    # 3) Peak latency distribution (post-onset, direction=all, all whiskers)
-    ax = axes[1, 0]
-    all_lat = wr.loc[(wr["direction"] == "all") & wr["whisker"].notna(),
-                     "peak_latency_ms"].dropna()
-    if len(all_lat) > 0:
-        ax.hist(all_lat, bins=30, color="mediumseagreen", edgecolor="black")
-    ax.set_xlabel("Peak Latency (ms)")
-    ax.set_ylabel("Count")
-    ax.set_title("Peak Latency Distribution (all whiskers)")
-
-    # 4) Transient vs sustained scatter
-    ax = axes[1, 1]
-    t = profiles["transient_fr"].values
-    s = profiles["sustained_fr"].values
-    ax.scatter(s, t, c="darkorange", edgecolors="black", s=50, alpha=0.8)
-    lim = max(t.max(), s.max()) * 1.1 if len(t) > 0 else 1
-    ax.plot([0, lim], [0, lim], "k--", alpha=0.3, label="unity")
-    for _, r in profiles.iterrows():
-        ax.annotate(str(int(r["unit"])),
-                    (r["sustained_fr"], r["transient_fr"]),
-                    fontsize=6, alpha=0.7)
-    ax.set_xlabel("Sustained FR (10-50 ms)")
-    ax.set_ylabel("Transient FR (0-10 ms)")
-    ax.set_title("Transient vs Sustained")
-    ax.legend(fontsize=8)
-
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    path = os.path.join(out_dir, "profile_summary.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved {path}")
-
-
 def plot_dsi_by_whisker(profiles: pd.DataFrame, out_dir: str):
     """Grouped bar chart: raw & adjusted DSI per whisker for every unit."""
     dsi_adj_cols = [c for c in profiles.columns if c.startswith("dsi_adj_w")]
@@ -395,139 +330,131 @@ def plot_dsi_by_whisker(profiles: pd.DataFrame, out_dir: str):
     print(f"  Saved {path}")
 
 
-def plot_latency_ret_vs_pro(wr: pd.DataFrame, out_dir: str):
-    """Scatter: retraction peak latency vs protraction peak latency per unit×whisker."""
-    whiskers = sorted([w for w in wr["whisker"].unique() if w is not None])
-    units = sorted(wr["unit"].unique())
-
-    ret_lats, pro_lats, labels = [], [], []
-    for unit in units:
-        for w in whiskers:
-            ret = wr[(wr["unit"] == unit) & (wr["whisker"] == w) &
-                     (wr["direction"] == "retraction")]
-            pro = wr[(wr["unit"] == unit) & (wr["whisker"] == w) &
-                     (wr["direction"] == "protraction")]
-            if len(ret) and len(pro):
-                rl = ret["peak_latency_ms"].values[0]
-                pl = pro["peak_latency_ms"].values[0]
-                if not (np.isnan(rl) or np.isnan(pl)):
-                    ret_lats.append(rl)
-                    pro_lats.append(pl)
-                    labels.append(f"U{unit}W{w}")
-
-    fig, ax = plt.subplots(figsize=(7, 7))
-    ax.scatter(pro_lats, ret_lats, c="steelblue", edgecolors="black", s=40, alpha=0.7)
-    lim_max = max(max(ret_lats, default=1), max(pro_lats, default=1)) * 1.1
-    ax.plot([0, lim_max], [0, lim_max], "k--", alpha=0.3, label="unity")
-    for rl, pl, lab in zip(ret_lats, pro_lats, labels):
-        ax.annotate(lab, (pl, rl), fontsize=5, alpha=0.6)
-    ax.set_xlabel("Protraction Peak Latency (ms)")
-    ax.set_ylabel("Retraction Peak Latency (ms)")
-    ax.set_title("Peak Latency: Retraction vs Protraction")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    path = os.path.join(out_dir, "latency_ret_vs_pro.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved {path}")
-
-
-def plot_clustering(profiles: pd.DataFrame, out_dir: str):
+def plot_whisker_selectivity(df: pd.DataFrame, wr: pd.DataFrame,
+                              profiles: pd.DataFrame, out_dir: str):
     """
-    Scatter of mean |DSI| vs transient/sustained ratio, coloured by
-    directional classification.  Provides a simple view of unit sub-populations.
-    """
-    color_map = {
-        "strongly_directional": "crimson",
-        "weakly_directional": "orange",
-        "non_directional": "steelblue",
-    }
+    Per-unit whisker selectivity figure with three panels per unit:
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    for cls, color in color_map.items():
-        sub = profiles[profiles["direction_class"] == cls]
-        tsr = sub["transient_sustained_ratio"].replace([np.inf], np.nan).fillna(0)
-        ax.scatter(sub["mean_abs_dsi_adj"], tsr, c=color, edgecolors="black",
-                   s=60, alpha=0.8, label=cls.replace("_", " "))
-        for _, r in sub.iterrows():
-            tsr_val = r["transient_sustained_ratio"]
-            if np.isinf(tsr_val) or np.isnan(tsr_val):
-                tsr_val = 0
-            ax.annotate(str(int(r["unit"])),
-                        (r["mean_abs_dsi_adj"], tsr_val),
-                        fontsize=6, alpha=0.7)
+    1. PSTH overlay — mean firing-rate trace for each whisker (direction=all)
+       plotted on the same axes so response magnitude, latency, and shape
+       differences are immediately visible.
 
-    ax.axvline(0.2, color="gray", ls=":", lw=0.8, alpha=0.6)
-    ax.axvline(0.5, color="gray", ls=":", lw=0.8, alpha=0.6)
-    ax.axhline(2.0, color="gray", ls=":", lw=0.8, alpha=0.6)
-    ax.axhline(0.5, color="gray", ls=":", lw=0.8, alpha=0.6)
-    ax.set_xlabel("Mean |DSI adj| across whiskers")
-    ax.set_ylabel("Transient / Sustained Ratio")
-    ax.set_title("Unit Clustering: Directionality × Response Type")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    path = os.path.join(out_dir, "clustering.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved {path}")
+    2. Peak FR heatmap — whisker × direction matrix (retraction / protraction)
+       with the cell value = peak FR.  Highlights which whisker × direction
+       combination is dominant.
 
+    3. Whisker Selectivity Index (WSI) bar — for each direction, compute
+       WSI = (R_best - R_others_mean) / (R_best + R_others_mean)
+       where R_best is the peak FR from the best whisker and R_others_mean
+       is the mean peak FR from the remaining whiskers.  WSI = 1 means the
+       unit responds only to one whisker; WSI ≈ 0 means equal response.
 
-def plot_per_unit_whisker_tuning(profiles: pd.DataFrame, wr: pd.DataFrame,
-                                 out_dir: str):
-    """
-    One polar-style bar chart per unit showing peak FR for each whisker,
-    split by retraction / protraction.
+    Saves one PNG per unit.
     """
     whiskers = sorted([w for w in wr["whisker"].unique() if w is not None])
     units = sorted(profiles["unit"].values)
+    colors_w = plt.cm.tab10(np.linspace(0, 1, max(len(whiskers), 1)))
 
-    n_units = len(units)
-    ncols = min(5, n_units)
-    nrows = int(np.ceil(n_units / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3.2, nrows * 3))
-    if n_units == 1:
-        axes = np.array([axes])
-    axes = axes.flatten()
+    for unit in units:
+        fig = plt.figure(figsize=(15, 4.5))
+        gs = GridSpec(1, 3, figure=fig, width_ratios=[2.5, 1.2, 1],
+                      wspace=0.35)
 
-    for i, unit in enumerate(units):
-        ax = axes[i]
-        x = np.arange(len(whiskers))
-        w = 0.35
+        # ── Panel 1: PSTH overlay (direction = all) ───────────────────
+        ax_psth = fig.add_subplot(gs[0, 0])
+        for wi, w in enumerate(whiskers):
+            sub = df[(df["unit"] == unit) &
+                     (df["interval"] == f"interval_{w}_mask_contact")]
+            if len(sub) == 0:
+                continue
+            sub = sub.sort_values("bin_ms")
+            ax_psth.plot(sub["bin_ms"].values, sub["firing_rate_hz"].values,
+                         color=colors_w[wi], linewidth=1.2,
+                         label=f"W{w}", alpha=0.85)
 
-        rets, pros = [], []
-        for wh in whiskers:
-            r = wr[(wr["unit"] == unit) & (wr["whisker"] == wh) &
-                   (wr["direction"] == "retraction")]
-            p = wr[(wr["unit"] == unit) & (wr["whisker"] == wh) &
-                   (wr["direction"] == "protraction")]
-            rets.append(r["peak_fr"].values[0] if len(r) else 0)
-            pros.append(p["peak_fr"].values[0] if len(p) else 0)
+        ax_psth.axvline(0, color="black", ls="--", lw=0.8, alpha=0.6)
+        ax_psth.set_xlabel("Time from contact onset (ms)", fontsize=9)
+        ax_psth.set_ylabel("Firing Rate (Hz)", fontsize=9)
+        ax_psth.set_title("PSTH by Whisker", fontsize=10)
+        if ax_psth.get_legend_handles_labels()[1]:
+            ax_psth.legend(fontsize=7, loc="upper right")
+        ax_psth.tick_params(labelsize=7)
 
-        ax.bar(x - w / 2, rets, w, label="Ret", color="steelblue",
-               edgecolor="black", linewidth=0.4)
-        ax.bar(x + w / 2, pros, w, label="Pro", color="salmon",
-               edgecolor="black", linewidth=0.4)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"W{wh}" for wh in whiskers], fontsize=7)
-        bw = profiles.loc[profiles["unit"] == unit, "best_whisker"].values[0]
-        bw_str = f"W{int(bw)}" if not np.isnan(bw) else "?"
-        dsi_r = profiles.loc[profiles["unit"] == unit, "best_whisker_dsi_raw"].values[0]
-        dsi_a = profiles.loc[profiles["unit"] == unit, "best_whisker_dsi_adj"].values[0]
-        ax.set_title(f"U{unit}  best={bw_str}  raw={dsi_r:.2f}  adj={dsi_a:.2f}",
-                     fontsize=7)
-        ax.tick_params(labelsize=6)
-        if i == 0:
-            ax.legend(fontsize=6)
+        # ── Panel 2: Peak FR heatmap (whisker × direction) ────────────
+        ax_heat = fig.add_subplot(gs[0, 1])
+        directions = ["retraction", "protraction", "all"]
+        matrix = np.zeros((len(whiskers), len(directions)))
+        for wi, w in enumerate(whiskers):
+            for di, d in enumerate(directions):
+                row = wr[(wr["unit"] == unit) & (wr["whisker"] == w) &
+                         (wr["direction"] == d)]
+                matrix[wi, di] = row["peak_fr"].values[0] if len(row) else 0
 
-    for j in range(i + 1, len(axes)):
-        axes[j].set_visible(False)
+        im = ax_heat.imshow(matrix, aspect="auto", cmap="YlOrRd",
+                            interpolation="nearest")
+        ax_heat.set_xticks(range(len(directions)))
+        ax_heat.set_xticklabels(["Ret", "Pro", "All"], fontsize=8)
+        ax_heat.set_yticks(range(len(whiskers)))
+        ax_heat.set_yticklabels([f"W{w}" for w in whiskers], fontsize=8)
+        ax_heat.set_title("Peak FR (Hz)", fontsize=10)
+        # Annotate cells
+        for wi in range(len(whiskers)):
+            for di in range(len(directions)):
+                val = matrix[wi, di]
+                color = "white" if val > matrix.max() * 0.65 else "black"
+                ax_heat.text(di, wi, f"{val:.0f}", ha="center", va="center",
+                             fontsize=7, color=color)
+        fig.colorbar(im, ax=ax_heat, fraction=0.046, pad=0.04)
 
-    fig.suptitle("Peak FR by Whisker & Direction", fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
-    path = os.path.join(out_dir, "whisker_tuning_per_unit.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved {path}")
+        # ── Panel 3: Whisker Selectivity Index bars ───────────────────
+        ax_wsi = fig.add_subplot(gs[0, 2])
+        wsi_data = {}
+        for d in ["retraction", "protraction", "all"]:
+            frs = []
+            for w in whiskers:
+                row = wr[(wr["unit"] == unit) & (wr["whisker"] == w) &
+                         (wr["direction"] == d)]
+                frs.append(row["peak_fr"].values[0] if len(row) else 0)
+            frs = np.array(frs)
+            if len(frs) > 1 and frs.max() > 0:
+                best_idx = frs.argmax()
+                r_best = frs[best_idx]
+                r_others = np.mean(np.delete(frs, best_idx))
+                denom = r_best + r_others
+                wsi = (r_best - r_others) / denom if denom > 0 else 0.0
+            else:
+                wsi = 0.0
+            wsi_data[d] = wsi
+
+        bar_labels = ["Ret", "Pro", "All"]
+        bar_vals = [wsi_data["retraction"], wsi_data["protraction"],
+                    wsi_data["all"]]
+        bar_colors = ["steelblue", "salmon", "gray"]
+        ax_wsi.bar(bar_labels, bar_vals, color=bar_colors, edgecolor="black",
+                   linewidth=0.5)
+        ax_wsi.set_ylim(-0.1, 1.05)
+        ax_wsi.axhline(0, color="black", lw=0.6)
+        ax_wsi.set_ylabel("WSI", fontsize=9)
+        ax_wsi.set_title("Whisker Selectivity", fontsize=10)
+        ax_wsi.tick_params(labelsize=7)
+
+        # ── Unit title ────────────────────────────────────────────────
+        bw_val = profiles.loc[profiles["unit"] == unit, "best_whisker"].values[0]
+        bw_str = f"W{int(bw_val)}" if not np.isnan(bw_val) else "?"
+        dsi_a = profiles.loc[profiles["unit"] == unit,
+                             "best_whisker_dsi_adj"].values[0]
+        pref = profiles.loc[profiles["unit"] == unit,
+                            "preferred_direction"].values[0]
+        fig.suptitle(f"Unit {unit}  |  Best: {bw_str}  |  "
+                     f"DSI(adj): {dsi_a:.2f}  |  Pref: {pref}",
+                     fontsize=11, fontweight="bold", y=1.01)
+
+        fig.subplots_adjust(left=0.06, right=0.95, top=0.88, bottom=0.12,
+                            wspace=0.35)
+        path = os.path.join(out_dir, f"unit_{unit}_whisker_selectivity.png")
+        fig.savefig(path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  Saved {path}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -581,11 +508,8 @@ def run(csv_path: str, output_dir: str | None = None):
 
     # ── Generate figures ──────────────────────────────────────────────
     print("\nGenerating figures …")
-    plot_summary(profiles, wr, output_dir)
     plot_dsi_by_whisker(profiles, output_dir)
-    plot_latency_ret_vs_pro(wr, output_dir)
-    plot_clustering(profiles, output_dir)
-    plot_per_unit_whisker_tuning(profiles, wr, output_dir)
+    plot_whisker_selectivity(df, wr, profiles, output_dir)
 
     print(f"\n{'='*60}")
     print(f"Done. All outputs saved to {output_dir}")
