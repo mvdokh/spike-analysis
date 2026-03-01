@@ -9,7 +9,7 @@ mask_keys = ["0", "1", "2", "3", "4"]
 
 for i, mask_key in enumerate(mask_keys):
 
-    interval_key = f"interval_{i}"
+    interval_key = f"interval_{i}_mask_contact"
 
     mask_data = dm.getData(mask_key)
     interval_data = dm.getData(interval_key)

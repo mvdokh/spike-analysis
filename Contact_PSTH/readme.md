@@ -113,3 +113,7 @@ python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Li
 "C:\Users\wanglab\Desktop\Club Like Endings\102725_1\per_whisker_contact\interval_4_shrunk.csv"
 "C:\Users\wanglab\Desktop\Club Like Endings\102725_1\per_whisker_contact\interval_4_shrunk_protraction.csv"
 "C:\Users\wanglab\Desktop\Club Like Endings\102725_1\per_whisker_contact\interval_4_shrunk_retraction.csv"
+
+dsi_raw = (Rret - Rpro) / (Rret + Rpro) - standard dsi
+dsi_adj = DSIraw x (2sqrt(nret*npro) / nret + npro) - adjusted by trial count balance 
+balance = (2sqrt(nret*npro) / nret + npro) - 1.0 = equal trials -> 0 = extreme imbalance

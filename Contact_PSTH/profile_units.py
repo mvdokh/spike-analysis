@@ -99,6 +99,7 @@ def _mean_fr_in_window(fr_series, bin_series, lo, hi):
 def build_whisker_response_table(df: pd.DataFrame) -> pd.DataFrame:
     """
     For every (unit, whisker, direction) triplet compute:
+        - n_trials       : number of contact events
         - baseline_fr    : mean FR in pre-stimulus window (< 0 ms)
         - peak_fr        : peak FR in post-onset window [0, end)
         - peak_latency   : bin of peak FR (ms after onset)
@@ -106,11 +107,15 @@ def build_whisker_response_table(df: pd.DataFrame) -> pd.DataFrame:
         - transient_fr   : mean FR in [0, 10) ms
         - sustained_fr   : mean FR in [10, 50) ms
     """
+    has_n_trials = "n_trials" in df.columns
     rows = []
     for (unit, interval), grp in df.groupby(["unit", "interval"]):
         whisker, direction = _parse_interval_name(interval)
         bins = grp["bin_ms"]
         fr = grp["firing_rate_hz"]
+
+        # Trial count (constant within a group)
+        n_trials = int(grp["n_trials"].iloc[0]) if has_n_trials else np.nan
 
         baseline = _mean_fr_in_window(fr, bins, bins.min(), 0)
         peak_fr, peak_lat = _peak_fr_and_latency(fr, bins, window=(0, bins.max() + 1))
@@ -123,6 +128,7 @@ def build_whisker_response_table(df: pd.DataFrame) -> pd.DataFrame:
             "interval": interval,
             "whisker": whisker,
             "direction": direction,
+            "n_trials": n_trials,
             "baseline_fr": baseline,
             "peak_fr": peak_fr,
             "peak_latency_ms": peak_lat,
@@ -163,31 +169,63 @@ def compute_unit_profiles(wr: pd.DataFrame) -> pd.DataFrame:
             row["best_whisker_latency_ms"] = np.nan
 
         # ── DSI per whisker ───────────────────────────────────────────
+        # Raw DSI = (R_ret - R_pro) / (R_ret + R_pro)
+        # Adjusted DSI scales by trial-count balance factor:
+        #   balance = 2*sqrt(n_ret * n_pro) / (n_ret + n_pro)
+        # This equals 1 when trial counts are equal and → 0 when
+        # extremely imbalanced, shrinking noisy estimates toward 0.
         dsi_vals = []
+        dsi_adj_vals = []
         for w in whiskers:
             ret_row = u[(u["whisker"] == w) & (u["direction"] == "retraction")]
             pro_row = u[(u["whisker"] == w) & (u["direction"] == "protraction")]
             r_ret = ret_row["peak_fr"].values[0] if len(ret_row) else 0
             r_pro = pro_row["peak_fr"].values[0] if len(pro_row) else 0
+            n_ret = ret_row["n_trials"].values[0] if len(ret_row) else 0
+            n_pro = pro_row["n_trials"].values[0] if len(pro_row) else 0
+
             denom = r_ret + r_pro
-            dsi = (r_ret - r_pro) / denom if denom > 0 else 0.0
-            row[f"dsi_w{w}"] = dsi
+            dsi_raw = (r_ret - r_pro) / denom if denom > 0 else 0.0
+
+            # Trial-count balance factor (geometric / arithmetic mean)
+            n_sum = n_ret + n_pro
+            if n_sum > 0 and n_ret > 0 and n_pro > 0:
+                balance = 2 * np.sqrt(n_ret * n_pro) / n_sum
+            else:
+                balance = 0.0
+            dsi_adj = dsi_raw * balance
+
+            row[f"dsi_raw_w{w}"] = dsi_raw
+            row[f"dsi_adj_w{w}"] = dsi_adj
+            row[f"balance_w{w}"] = balance
+            row[f"n_ret_w{w}"] = int(n_ret)
+            row[f"n_pro_w{w}"] = int(n_pro)
             row[f"peak_ret_w{w}"] = r_ret
             row[f"peak_pro_w{w}"] = r_pro
-            dsi_vals.append(dsi)
+            dsi_vals.append(dsi_raw)
+            dsi_adj_vals.append(dsi_adj)
 
-        row["mean_abs_dsi"] = np.mean(np.abs(dsi_vals)) if dsi_vals else 0.0
+        row["mean_abs_dsi_raw"] = np.mean(np.abs(dsi_vals)) if dsi_vals else 0.0
+        row["mean_abs_dsi_adj"] = np.mean(np.abs(dsi_adj_vals)) if dsi_adj_vals else 0.0
 
         # ── Best-whisker DSI and preferred direction ──────────────────
         bw = row.get("best_whisker")
         if bw is not None and not np.isnan(bw):
             bw = int(bw)
-            row["best_whisker_dsi"] = row.get(f"dsi_w{bw}", 0.0)
+            row["best_whisker_dsi_raw"] = row.get(f"dsi_raw_w{bw}", 0.0)
+            row["best_whisker_dsi_adj"] = row.get(f"dsi_adj_w{bw}", 0.0)
+            row["best_whisker_balance"] = row.get(f"balance_w{bw}", 0.0)
+            row["best_whisker_n_ret"] = row.get(f"n_ret_w{bw}", 0)
+            row["best_whisker_n_pro"] = row.get(f"n_pro_w{bw}", 0)
             row["preferred_direction"] = (
-                "retraction" if row["best_whisker_dsi"] > 0 else "protraction"
+                "retraction" if row["best_whisker_dsi_adj"] > 0 else "protraction"
             )
         else:
-            row["best_whisker_dsi"] = 0.0
+            row["best_whisker_dsi_raw"] = 0.0
+            row["best_whisker_dsi_adj"] = 0.0
+            row["best_whisker_balance"] = 0.0
+            row["best_whisker_n_ret"] = 0
+            row["best_whisker_n_pro"] = 0
             row["preferred_direction"] = "none"
 
         # ── Best-whisker latencies for ret / pro ──────────────────────
@@ -218,8 +256,8 @@ def compute_unit_profiles(wr: pd.DataFrame) -> pd.DataFrame:
             row["sustained_fr"] = 0.0
             row["transient_sustained_ratio"] = np.nan
 
-        # ── Selectivity classification ────────────────────────────────
-        abs_dsi = abs(row["best_whisker_dsi"])
+        # ── Selectivity classification (based on adjusted DSI) ────────
+        abs_dsi = abs(row["best_whisker_dsi_adj"])
         if abs_dsi >= 0.5:
             row["direction_class"] = "strongly_directional"
         elif abs_dsi >= 0.2:
@@ -265,14 +303,20 @@ def plot_summary(profiles: pd.DataFrame, wr: pd.DataFrame, out_dir: str):
     ax.set_ylabel("# Units")
     ax.set_title("Best Whisker Distribution")
 
-    # 2) DSI distribution (best whisker)
+    # 2) DSI distribution (best whisker — raw vs adjusted)
     ax = axes[0, 1]
-    dsi = profiles["best_whisker_dsi"].dropna()
-    ax.hist(dsi, bins=np.linspace(-1, 1, 21), color="salmon", edgecolor="black")
+    dsi_raw = profiles["best_whisker_dsi_raw"].dropna()
+    dsi_adj = profiles["best_whisker_dsi_adj"].dropna()
+    bins_dsi = np.linspace(-1, 1, 21)
+    ax.hist(dsi_raw, bins=bins_dsi, color="salmon", edgecolor="black",
+            alpha=0.4, label="Raw DSI")
+    ax.hist(dsi_adj, bins=bins_dsi, color="steelblue", edgecolor="black",
+            alpha=0.6, label="Adjusted DSI")
     ax.axvline(0, color="black", ls="--", alpha=0.5)
     ax.set_xlabel("DSI  (>0 = retraction)")
     ax.set_ylabel("# Units")
     ax.set_title("Direction Selectivity Index (Best Whisker)")
+    ax.legend(fontsize=7)
 
     # 3) Peak latency distribution (post-onset, direction=all, all whiskers)
     ax = axes[1, 0]
@@ -308,31 +352,43 @@ def plot_summary(profiles: pd.DataFrame, wr: pd.DataFrame, out_dir: str):
 
 
 def plot_dsi_by_whisker(profiles: pd.DataFrame, out_dir: str):
-    """Grouped bar chart: DSI per whisker for every unit."""
-    dsi_cols = [c for c in profiles.columns if c.startswith("dsi_w")]
-    whiskers = [c.replace("dsi_w", "W") for c in dsi_cols]
+    """Grouped bar chart: raw & adjusted DSI per whisker for every unit."""
+    dsi_adj_cols = [c for c in profiles.columns if c.startswith("dsi_adj_w")]
+    dsi_raw_cols = [c for c in profiles.columns if c.startswith("dsi_raw_w")]
+    whiskers = [c.replace("dsi_adj_w", "W") for c in dsi_adj_cols]
     n_units = len(profiles)
+    n_whiskers = len(dsi_adj_cols)
 
-    fig, ax = plt.subplots(figsize=(max(8, n_units * 0.6), 5))
-    x = np.arange(n_units)
-    w = 0.8 / len(dsi_cols)
-    colors = plt.cm.Set2(np.linspace(0, 1, len(dsi_cols)))
+    fig, axes = plt.subplots(2, 1, figsize=(max(8, n_units * 0.6), 9),
+                             sharex=True)
 
-    for i, (col, wlabel) in enumerate(zip(dsi_cols, whiskers)):
-        ax.bar(x + i * w, profiles[col].values, width=w, label=wlabel,
-               color=colors[i], edgecolor="black", linewidth=0.4)
+    for ax, cols, title_label in [
+        (axes[0], dsi_raw_cols, "Raw DSI"),
+        (axes[1], dsi_adj_cols, "Trial-Count Adjusted DSI"),
+    ]:
+        x = np.arange(n_units)
+        w = 0.8 / n_whiskers
+        colors = plt.cm.Set2(np.linspace(0, 1, n_whiskers))
 
-    ax.set_xticks(x + w * len(dsi_cols) / 2)
-    ax.set_xticklabels([f"U{int(u)}" for u in profiles["unit"]], fontsize=7)
-    ax.axhline(0, color="black", lw=0.8)
-    ax.axhline(0.5, color="red", ls="--", lw=0.6, alpha=0.5, label="±0.5 threshold")
-    ax.axhline(-0.5, color="red", ls="--", lw=0.6, alpha=0.5)
-    ax.set_ylabel("DSI  (>0 = retraction)")
-    ax.set_xlabel("Unit")
-    ax.set_title("Direction Selectivity Index by Whisker")
-    ax.legend(fontsize=7, ncol=len(dsi_cols) + 1, loc="upper right")
+        for i, col in enumerate(cols):
+            wlabel = whiskers[i]
+            ax.bar(x + i * w, profiles[col].values, width=w, label=wlabel,
+                   color=colors[i], edgecolor="black", linewidth=0.4)
 
-    fig.tight_layout()
+        ax.set_xticks(x + w * n_whiskers / 2)
+        ax.set_xticklabels([f"U{int(u)}" for u in profiles["unit"]], fontsize=7)
+        ax.axhline(0, color="black", lw=0.8)
+        ax.axhline(0.5, color="red", ls="--", lw=0.6, alpha=0.5,
+                   label="±0.5 threshold")
+        ax.axhline(-0.5, color="red", ls="--", lw=0.6, alpha=0.5)
+        ax.set_ylabel("DSI  (>0 = retraction)")
+        ax.set_title(title_label)
+        ax.legend(fontsize=7, ncol=n_whiskers + 1, loc="upper right")
+
+    axes[1].set_xlabel("Unit")
+    fig.suptitle("Direction Selectivity Index by Whisker", fontsize=12,
+                 fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     path = os.path.join(out_dir, "dsi_by_whisker.png")
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -391,21 +447,21 @@ def plot_clustering(profiles: pd.DataFrame, out_dir: str):
     for cls, color in color_map.items():
         sub = profiles[profiles["direction_class"] == cls]
         tsr = sub["transient_sustained_ratio"].replace([np.inf], np.nan).fillna(0)
-        ax.scatter(sub["mean_abs_dsi"], tsr, c=color, edgecolors="black",
+        ax.scatter(sub["mean_abs_dsi_adj"], tsr, c=color, edgecolors="black",
                    s=60, alpha=0.8, label=cls.replace("_", " "))
         for _, r in sub.iterrows():
             tsr_val = r["transient_sustained_ratio"]
             if np.isinf(tsr_val) or np.isnan(tsr_val):
                 tsr_val = 0
             ax.annotate(str(int(r["unit"])),
-                        (r["mean_abs_dsi"], tsr_val),
+                        (r["mean_abs_dsi_adj"], tsr_val),
                         fontsize=6, alpha=0.7)
 
     ax.axvline(0.2, color="gray", ls=":", lw=0.8, alpha=0.6)
     ax.axvline(0.5, color="gray", ls=":", lw=0.8, alpha=0.6)
     ax.axhline(2.0, color="gray", ls=":", lw=0.8, alpha=0.6)
     ax.axhline(0.5, color="gray", ls=":", lw=0.8, alpha=0.6)
-    ax.set_xlabel("Mean |DSI| across whiskers")
+    ax.set_xlabel("Mean |DSI adj| across whiskers")
     ax.set_ylabel("Transient / Sustained Ratio")
     ax.set_title("Unit Clustering: Directionality × Response Type")
     ax.legend(fontsize=8)
@@ -455,8 +511,10 @@ def plot_per_unit_whisker_tuning(profiles: pd.DataFrame, wr: pd.DataFrame,
         ax.set_xticklabels([f"W{wh}" for wh in whiskers], fontsize=7)
         bw = profiles.loc[profiles["unit"] == unit, "best_whisker"].values[0]
         bw_str = f"W{int(bw)}" if not np.isnan(bw) else "?"
-        dsi = profiles.loc[profiles["unit"] == unit, "best_whisker_dsi"].values[0]
-        ax.set_title(f"U{unit}  best={bw_str}  DSI={dsi:.2f}", fontsize=7)
+        dsi_r = profiles.loc[profiles["unit"] == unit, "best_whisker_dsi_raw"].values[0]
+        dsi_a = profiles.loc[profiles["unit"] == unit, "best_whisker_dsi_adj"].values[0]
+        ax.set_title(f"U{unit}  best={bw_str}  raw={dsi_r:.2f}  adj={dsi_a:.2f}",
+                     fontsize=7)
         ax.tick_params(labelsize=6)
         if i == 0:
             ax.legend(fontsize=6)
@@ -504,7 +562,10 @@ def run(csv_path: str, output_dir: str | None = None):
 
     # ── Print summary table ───────────────────────────────────────────
     summary_cols = ["unit", "best_whisker", "best_whisker_peak_fr",
-                    "best_whisker_latency_ms", "best_whisker_dsi",
+                    "best_whisker_latency_ms",
+                    "best_whisker_dsi_raw", "best_whisker_dsi_adj",
+                    "best_whisker_balance",
+                    "best_whisker_n_ret", "best_whisker_n_pro",
                     "preferred_direction", "direction_class",
                     "transient_sustained_ratio", "response_type"]
     print(f"\n{'='*90}")

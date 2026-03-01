@@ -6,7 +6,7 @@ For each unit and each contact-interval CSV, computes the PSTH firing rate
 CSV file.
 
 Output CSV columns:
-    unit, interval, bin_ms, firing_rate_hz
+    unit, interval, bin_ms, firing_rate_hz, n_trials
 
 Usage
 -----
@@ -139,12 +139,14 @@ def run_csv_export(data_dir, contact_dir=None, output_dir=None,
             print(f"  Unit {unit} | {label}: {n_spikes} spikes across "
                   f"{len(trials)} trials")
 
+            n_trials = len(trials)
             for c, fr in zip(centres, firing_rate):
                 rows.append({
                     "unit": unit,
                     "interval": label,
                     "bin_ms": c,
                     "firing_rate_hz": fr,
+                    "n_trials": n_trials,
                 })
 
     # Build and save DataFrame
