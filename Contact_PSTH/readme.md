@@ -117,3 +117,6 @@ python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Li
 dsi_raw = (Rret - Rpro) / (Rret + Rpro) - standard dsi
 dsi_adj = DSIraw x (2sqrt(nret*npro) / nret + npro) - adjusted by trial count balance 
 balance = (2sqrt(nret*npro) / nret + npro) - 1.0 = equal trials -> 0 = extreme imbalance
+
+wsi_raw = (Rthis - Rothers) / (Rthis + Rothers) - how much this whiskers peak FR exceeds the meanof the other whiskers
+wsi_adj = WSIraw x nthis/nmax - scaled by the ratio of this whiskers trial count to the most sampled whiskers trial count
