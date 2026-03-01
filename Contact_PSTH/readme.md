@@ -120,3 +120,9 @@ balance = (2sqrt(nret*npro) / nret + npro) - 1.0 = equal trials -> 0 = extreme i
 
 wsi_raw = (Rthis - Rothers) / (Rthis + Rothers) - how much this whiskers peak FR exceeds the meanof the other whiskers
 wsi_adj = WSIraw x nthis/nmax - scaled by the ratio of this whiskers trial count to the most sampled whiskers trial count
+
+
+Tuning Curve Significance Testing:
+Kruskal-Wallis test on bin-level firing rates, followed by pairwise Mann-Whitney U tests with multiple comparison correction. 
+
+For retraction versus protraction within a whisker, a Mann-Whitney U test would work similarly
