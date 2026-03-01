@@ -76,11 +76,13 @@ Video frames → synced via TTL rising edges on channel 1 of digitalin.dat (each
 Spike times → in seconds, referenced to the master clock (30kHz sample rate)
 Frame N maps to the Nth rising edge sample index, converted to seconds via sample_index / 30000
 
-'''
+usage:
 python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102625_1"
-'''
-
-
+python Contact_PSTH/contact_psth_combined.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102625_1"
+python Contact_PSTH/contact_psth_to_csv.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102725_1"
+python Contact_PSTH/profile_units.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102725_1"
+python Contact_PSTH/tuning_curves.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
+python "Contact_PSTH\unit_analysis_suite.py" --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
 
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact_retraction.csv"
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact.csv"
@@ -115,7 +117,7 @@ python Contact_PSTH/contact_psth.py --data_dir "C:\Users\wanglab\Desktop\Club Li
 "C:\Users\wanglab\Desktop\Club Like Endings\102725_1\per_whisker_contact\interval_4_shrunk_retraction.csv"
 
 dsi_raw = (Rret - Rpro) / (Rret + Rpro) - standard dsi
-dsi_adj = DSIraw x (2sqrt(nret*npro) / nret + npro) - adjusted by trial count balance 
+dsi_adj = DSIraw x (2 x sqrt (nret x npro) / nret + npro) - adjusted by trial count balance 
 balance = (2sqrt(nret*npro) / nret + npro) - 1.0 = equal trials -> 0 = extreme imbalance
 
 wsi_raw = (Rthis - Rothers) / (Rthis + Rothers) - how much this whiskers peak FR exceeds the meanof the other whiskers
