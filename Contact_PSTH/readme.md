@@ -83,6 +83,7 @@ python Contact_PSTH/contact_psth_to_csv.py --data_dir "C:\Users\wanglab\Desktop\
 python Contact_PSTH/profile_units.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102725_1"
 python Contact_PSTH/tuning_curves.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
 python "Contact_PSTH\unit_analysis_suite.py" --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
+python Contact_PSTH\contact_psth_end_aligned.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
 
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact_retraction.csv"
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact.csv"
