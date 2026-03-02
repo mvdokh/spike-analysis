@@ -84,6 +84,7 @@ python Contact_PSTH/profile_units.py --data_dir "C:\Users\wanglab\Desktop\Club L
 python Contact_PSTH/tuning_curves.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
 python "Contact_PSTH\unit_analysis_suite.py" --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
 python Contact_PSTH\contact_psth_end_aligned.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_2"
+python Contact_PSTH\population_psth_heatmap.py --data_dir "C:\Users\wanglab\Desktop\Club Like Endings\102225_1"
 
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_0_mask_contact_retraction.csv"
 "C:\Users\wanglab\Desktop\Club Like Endings\102525_1\per_whisker_contact\interval_1_mask_contact.csv"
@@ -129,3 +130,9 @@ Tuning Curve Significance Testing:
 Kruskal-Wallis test on bin-level firing rates, followed by pairwise Mann-Whitney U tests with multiple comparison correction. 
 
 For retraction versus protraction within a whisker, a Mann-Whitney U test would work similarly
+
+Winsorize the modulation indices to clip extreme values (units with near-zero baseline get 33x indices)
+Use robust scaling (IQR-based) instead of z-score so outliers don't dominate
+Use Calinski-Harabasz as a secondary criterion — silhouette loves splitting off tiny outlier clusters
+
+too many features
