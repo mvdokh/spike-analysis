@@ -67,6 +67,7 @@ from feature_space_analysis import (
     extract_features, FEATURE_NAMES, FEATURE_LABELS,
     ALL_FEATURE_NAMES, ALL_FEATURE_LABELS,
     _cluster_colors, cluster_units, signed_log_transform,
+    filter_responsive_units,
 )
 
 
@@ -265,7 +266,7 @@ def plot_tsne(X_scaled, unit_labels, labels, n_clusters, out_dir):
     if not HAS_TSNE:
         print("  TSNE import unavailable — skipping.")
         return
-    perp = min(30, max(2, n // 3))
+    perp = min(15, max(2, n // 4))
     try:
         tsne = TSNE(n_components=2, perplexity=perp, random_state=42,
                     init="pca", learning_rate="auto")
@@ -303,7 +304,7 @@ def plot_umap(X_scaled, unit_labels, labels, n_clusters, out_dir):
         return
     n = len(unit_labels)
     reducer = UMAP(n_components=2, random_state=42,
-                   n_neighbors=min(15, n - 1))
+                   n_neighbors=min(10, n - 1))
     X_umap = reducer.fit_transform(X_scaled)
     colours = _cluster_colors(n_clusters)
 
@@ -479,10 +480,14 @@ def run(base_dir, sessions, output_dir, n_clusters=None):
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # ── 2. Save combined features ─────────────────────────────────────
+    # ── 2. Save full feature table & filter non-responsive units ──────
     feat_csv = os.path.join(output_dir, "batch_unit_features.csv")
-    feat_df.to_csv(feat_csv, index=False)
-    print(f"   Saved {feat_csv}")
+
+    print("\n   Filtering non-responsive units …")
+    feat_df_all = feat_df.copy()
+    feat_df = filter_responsive_units(feat_df)
+    feat_df_all.to_csv(feat_csv, index=False)  # full table with responsive col
+    print(f"   {len(feat_df)} responsive units retained for clustering")
 
     unit_labels = feat_df["label"].tolist()
     sessions_arr = feat_df["session"].values
@@ -493,11 +498,11 @@ def run(base_dir, sessions, output_dir, n_clusters=None):
         return
 
     # ── 3. Standardise ────────────────────────────────────────────────
-    print("\n2. Standardising features (signed-log + RobustScaler) …")
+    print("\n2. Standardising features (StandardScaler) …")
     print("   Clustering on 9 core temporal features")
-    X_log = signed_log_transform(X_raw)
-    scaler = RobustScaler()
-    X_scaled = scaler.fit_transform(X_log)
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_raw)
     feat_df_std = pd.DataFrame(X_scaled, columns=FEATURE_NAMES)
 
     # ── 4. Cluster ────────────────────────────────────────────────────
@@ -548,8 +553,22 @@ def main():
                              "batch_feature_space)")
     parser.add_argument("--n_clusters", type=int, default=None,
                         help="Force number of clusters "
-                             "(default: auto via silhouette)")
+                             "(default: auto via gap statistic)")
+    parser.add_argument("--min_events", type=int, default=None,
+                        help="Minimum contact events for best whisker "
+                             "(default: module constant MIN_EVENTS)")
+    parser.add_argument("--min_mod", type=float, default=None,
+                        help="Minimum max |modulation index| to be "
+                             "considered responsive (default: module "
+                             "constant MIN_MAX_MOD_INDEX)")
     args = parser.parse_args()
+
+    # Override thresholds if CLI flags provided
+    import feature_space_analysis as _fsa
+    if args.min_events is not None:
+        _fsa.MIN_EVENTS = args.min_events
+    if args.min_mod is not None:
+        _fsa.MIN_MAX_MOD_INDEX = args.min_mod
 
     output_dir = args.output_dir or os.path.join(args.base_dir,
                                                   "batch_feature_space")

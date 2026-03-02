@@ -137,6 +137,52 @@ def signed_log_transform(X):
     return np.sign(X) * np.log1p(np.abs(X))
 
 
+# ── Unit inclusion criteria ───────────────────────────────────────────────────
+# Units that fail either criterion are excluded from clustering (but still
+# appear in the full CSV with  responsive = False).
+MIN_EVENTS = 100           # minimum contact events for best whisker
+MIN_MAX_MOD_INDEX = 1.25   # minimum abs(modulation index) in any window
+
+
+def filter_responsive_units(feat_df):
+    """Mark non-responsive units and return a filtered copy for clustering.
+
+    A unit is considered **responsive** if:
+      1. ``n_events_best_whisker >= MIN_EVENTS``  (enough trials), AND
+      2. at least one of the 9 core temporal features has
+         ``|mod_index| >= MIN_MAX_MOD_INDEX``  (detectable FR change).
+
+    A ``responsive`` boolean column is added to *feat_df* (in-place) so
+    the full table can be saved with the flag.  The returned DataFrame
+    contains only responsive units.
+    """
+    core = FEATURE_NAMES   # 9 core temporal features
+    max_abs = feat_df[core].abs().max(axis=1)
+    n_ev = feat_df["n_events_best_whisker"] if "n_events_best_whisker" in feat_df.columns else pd.Series(999, index=feat_df.index)
+
+    responsive = (n_ev >= MIN_EVENTS) & (max_abs >= MIN_MAX_MOD_INDEX)
+    feat_df["responsive"] = responsive
+
+    n_total = len(feat_df)
+    n_excl = (~responsive).sum()
+    if n_excl > 0:
+        print(f"   Excluded {n_excl}/{n_total} non-responsive units "
+              f"(min_events={MIN_EVENTS}, min_mod={MIN_MAX_MOD_INDEX})")
+        excl = feat_df.loc[~responsive]
+        for _, row in excl.iterrows():
+            lbl = row.get("label", f"U{row['unit']}")
+            reason = []
+            if n_ev.loc[row.name] < MIN_EVENTS:
+                reason.append(f"events={int(n_ev.loc[row.name])}")
+            if max_abs.loc[row.name] < MIN_MAX_MOD_INDEX:
+                reason.append(f"max_mod={max_abs.loc[row.name]:.3f}")
+            print(f"      {lbl}  ({', '.join(reason)})")
+    else:
+        print(f"   All {n_total} units pass responsiveness criteria.")
+
+    return feat_df.loc[responsive].reset_index(drop=True)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  Feature extraction
 # ══════════════════════════════════════════════════════════════════════════════
@@ -291,6 +337,9 @@ def extract_features(df, df_end=None):
         bins = sub["bin_ms"].values
         fr = sub["firing_rate_hz"].values
 
+        # Number of contact events for the best whisker
+        n_events_bw = int(sub["n_trials"].iloc[0]) if "n_trials" in sub.columns else 0
+
         bl = _mean_fr_window(bins, fr, -50, -10)
 
         pre_onset     = _modulation_index(_mean_fr_window(bins, fr, -10, 0),   bl)
@@ -394,6 +443,7 @@ def extract_features(df, df_end=None):
             "dsi": dsi,
             "wsi": wsi,
             "baseline_fr": bl,
+            "n_events_best_whisker": n_events_bw,
         })
 
     return pd.DataFrame(rows)
@@ -571,7 +621,7 @@ def plot_tsne(X_scaled, units, labels, n_clusters, out_dir):
     if n < 4:
         print("  Too few units for t-SNE — skipping.")
         return
-    perp = min(30, max(2, n // 3))
+    perp = min(15, max(2, n // 4))
     try:
         tsne = TSNE(n_components=2, perplexity=perp, random_state=42,
                     init="pca", learning_rate="auto")
@@ -607,7 +657,7 @@ def plot_umap(X_scaled, units, labels, n_clusters, out_dir):
     if not HAS_UMAP:
         print("  UMAP not installed — skipping.  pip install umap-learn")
         return
-    reducer = UMAP(n_components=2, random_state=42, n_neighbors=min(15, len(units)-1))
+    reducer = UMAP(n_components=2, random_state=42, n_neighbors=min(10, len(units)-1))
     X_umap = reducer.fit_transform(X_scaled)
     colours = _cluster_colors(n_clusters)
 
@@ -764,6 +814,12 @@ def run(csv_path, output_dir=None, n_clusters=None, csv_end_path=None):
     print(feat_df[["unit", "best_whisker"] + FEATURE_NAMES].to_string(
         index=False))
 
+    # ── 1b. Filter non-responsive units ───────────────────────────────
+    print("\n   Filtering non-responsive units …")
+    feat_df_all = feat_df.copy()  # keep full table for CSV
+    feat_df = filter_responsive_units(feat_df)
+    feat_df_all.to_csv(feat_csv, index=False)  # update with responsive col
+
     units = feat_df["unit"].tolist()
     X_raw = feat_df[FEATURE_NAMES].values
 
@@ -772,11 +828,11 @@ def run(csv_path, output_dir=None, n_clusters=None, csv_end_path=None):
         return
 
     # ── 2. Standardise ────────────────────────────────────────────────
-    print("\n2. Standardising features (signed-log + RobustScaler) …")
+    print("\n2. Standardising features (StandardScaler) …")
     print("   Clustering on 9 core temporal features")
-    X_log = signed_log_transform(X_raw)
-    scaler = RobustScaler()
-    X_scaled = scaler.fit_transform(X_log)
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_raw)
     feat_df_std = pd.DataFrame(X_scaled, columns=FEATURE_NAMES)
 
     # ── 3. Cluster ────────────────────────────────────────────────────
@@ -824,8 +880,21 @@ Examples:
                              "(auto-detected if omitted)")
     parser.add_argument("--output_dir", default=None)
     parser.add_argument("--n_clusters", type=int, default=None,
-                        help="Number of clusters (default: auto via silhouette)")
+                        help="Number of clusters (default: auto via gap statistic)")
+    parser.add_argument("--min_events", type=int, default=None,
+                        help="Minimum contact events for best whisker "
+                             "(default: %(default)s)")
+    parser.add_argument("--min_mod", type=float, default=None,
+                        help="Minimum max |modulation index| to be "
+                             "considered responsive (default: %(default)s)")
     args = parser.parse_args()
+
+    # Override module-level thresholds if CLI flags provided
+    import feature_space_analysis as _self
+    if args.min_events is not None:
+        _self.MIN_EVENTS = args.min_events
+    if args.min_mod is not None:
+        _self.MIN_MAX_MOD_INDEX = args.min_mod
 
     if args.csv:
         csv_path = args.csv
