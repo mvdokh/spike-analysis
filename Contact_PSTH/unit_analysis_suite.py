@@ -726,72 +726,126 @@ def plot_mutual_info(mi_df, units, out_dir):
 #  7. Receptive field map
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Default whisker positions (linear arrangement).
-# Override with a JSON file {whisker_id: [x, y]} if needed.
-DEFAULT_WHISKER_POS = {0: (0, 0), 1: (1, 0), 2: (2, 0), 3: (3, 0), 4: (4, 0)}
-
 
 def plot_receptive_field(trial_df, whiskers, units, out_dir,
                          whisker_pos=None):
     """
-    Bubble-plot receptive field map: position = whisker location,
-    size/colour = evoked response (mean spike count in response window).
-    One subplot per unit.
+    Receptive field heatmap — whiskers on y-axis, units on x-axis.
+
+    Values = mean response spike count minus mean baseline spike count
+    (baseline window = [-50, -30) ms).  Can be negative (suppression).
+    Units sorted by best whisker so same-whisker units are grouped.
     """
-    if whisker_pos is None:
-        whisker_pos = {w: DEFAULT_WHISKER_POS.get(w, (w, 0))
-                       for w in whiskers}
+    from matplotlib.colors import TwoSlopeNorm
+    import matplotlib.gridspec as gridspec
 
-    n_units = len(units)
-    ncols = min(5, n_units)
-    nrows = int(np.ceil(n_units / ncols))
-    fig, axes = plt.subplots(nrows, ncols,
-                             figsize=(2.5 * ncols, 2.5 * nrows),
-                             squeeze=False)
+    BL_LO, BL_HI = -50.0, -30.0   # baseline window in ms
+    RESP_LO, RESP_HI = 0.0, 5.0   # response window in ms
+    BL_DUR_S  = (BL_HI - BL_LO) / 1000.0    # 0.020 s
+    RESP_DUR_S = (RESP_HI - RESP_LO) / 1000.0  # 0.005 s
 
-    # Global max for consistent colour scale
-    global_max = 0
-    unit_data = {}
-    for unit in units:
-        vals = {}
-        for w in whiskers:
+    whiskers = sorted(whiskers)
+    n_w = len(whiskers)
+    n_u = len(units)
+
+    # ── Collect baseline-subtracted firing rate [whisker × unit] ──────
+    # Convert spike counts → Hz in each window, then subtract.
+    mat_raw = np.zeros((n_w, n_u))
+    for ci, unit in enumerate(units):
+        for ri, w in enumerate(whiskers):
             sub = trial_df[(trial_df["unit"] == unit) &
                            (trial_df["whisker"] == w) &
                            (trial_df["direction"] == "all")]
-            mean_sc = sub["n_spikes_resp"].mean() if len(sub) > 0 else 0
-            vals[w] = mean_sc
-            global_max = max(global_max, mean_sc)
-        unit_data[unit] = vals
-    if global_max == 0:
-        global_max = 1
+            if len(sub) == 0:
+                continue
+            spike_lists = sub["spike_times_ms"].values
+            # Firing rate (Hz) per trial in each window
+            resp_hz = np.array([
+                np.sum((np.array(st) >= RESP_LO) & (np.array(st) < RESP_HI))
+                / RESP_DUR_S for st in spike_lists
+            ])
+            bl_hz = np.array([
+                np.sum((np.array(st) >= BL_LO) & (np.array(st) < BL_HI))
+                / BL_DUR_S for st in spike_lists
+            ])
+            mat_raw[ri, ci] = np.mean(resp_hz) - np.mean(bl_hz)
 
-    for idx, unit in enumerate(units):
-        ax = axes[idx // ncols, idx % ncols]
-        xs = [whisker_pos[w][0] for w in whiskers]
-        ys = [whisker_pos[w][1] for w in whiskers]
-        vals = [unit_data[unit][w] for w in whiskers]
-        sizes = [max(v / global_max * 300, 20) for v in vals]
-        sc = ax.scatter(xs, ys, s=sizes, c=vals, cmap="YlOrRd",
-                        vmin=0, vmax=global_max, edgecolors="black", lw=0.5)
-        for w, xp, yp in zip(whiskers, xs, ys):
-            ax.annotate(f"W{w}", (xp, yp), textcoords="offset points",
-                        xytext=(0, -12), ha="center", fontsize=6)
-        ax.set_title(f"U{unit}", fontsize=8)
-        ax.set_xlim(-0.5, max(xs) + 0.5)
-        ax.set_ylim(-0.5, max(ys) + 0.5)
-        ax.set_aspect("equal")
-        ax.tick_params(labelsize=6)
+    # ── Filter: drop units where max |Δ| across all whiskers <= 0.05 ──
+    max_abs = np.max(np.abs(mat_raw), axis=0)          # per unit
+    keep_mask = max_abs > 0.06
+    keep_idx = np.where(keep_mask)[0]
+    if len(keep_idx) == 0:
+        print("  No units exceed ±0.05 threshold — skipping RF map.")
+        return
+    mat_filt = mat_raw[:, keep_idx]
+    units_filt = [units[i] for i in keep_idx]
+    n_u = len(units_filt)
 
-    for idx in range(n_units, nrows * ncols):
-        axes[idx // ncols, idx % ncols].set_visible(False)
+    # ── Sort kept units by best whisker (then by peak descending) ─────
+    best_w_idx = np.argmax(mat_filt, axis=0)
+    peak_val   = mat_filt.max(axis=0)
+    sort_order = np.lexsort((-peak_val, best_w_idx))
+    units_sorted = [units_filt[i] for i in sort_order]
+    mat = mat_filt[:, sort_order]
 
-    fig.subplots_adjust(right=0.88)
-    cbar_ax = fig.add_axes([0.90, 0.15, 0.015, 0.6])
-    fig.colorbar(sc, cax=cbar_ax, label="Mean spike count")
-    fig.suptitle("Receptive Field Maps", fontsize=12, fontweight="bold")
-    fig.subplots_adjust(top=0.92)
+    vmin, vmax = mat.min(), mat.max()
+    abs_max = max(abs(vmin), abs(vmax), 1e-6)
+
+    # ── Figure layout (heatmap + colourbar, no bar chart) ─────────────
+    fig_w = max(5, 0.55 * n_u + 2.0)
+    fig = plt.figure(figsize=(fig_w, n_w * 0.7 + 1.4))
+    gs = gridspec.GridSpec(1, 2,
+                           width_ratios=[n_u, 0.3],
+                           wspace=0.08)
+    ax_heat = fig.add_subplot(gs[0])
+    ax_cbar = fig.add_subplot(gs[1])
+
+    # ── Heatmap (diverging: blue = suppression, red = excitation) ─────
+    cmap = plt.cm.RdBu_r
+    # Normalize to [-1, 1] by dividing by the global max absolute value
+    abs_max = max(np.abs(mat).max(), 1e-6)
+    mat = mat / abs_max
+    norm = TwoSlopeNorm(vmin=-1, vcenter=0, vmax=1)
+    ax_heat.imshow(mat, aspect="auto", cmap=cmap, norm=norm,
+                   interpolation="nearest")
+
+    # Cell annotations
+    for ri in range(n_w):
+        for ci in range(n_u):
+            val = mat[ri, ci]
+            rgba = cmap(norm(val))
+            lum = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
+            tc = "white" if lum < 0.45 else "black"
+            ax_heat.text(ci, ri, f"{val:.2f}", ha="center", va="center",
+                         fontsize=6.5, fontweight="bold", color=tc)
+
+    # Whisker-group separators
+    sorted_best = best_w_idx[sort_order]
+    for ci in range(1, n_u):
+        if sorted_best[ci] != sorted_best[ci - 1]:
+            ax_heat.axvline(ci - 0.5, color="black", linewidth=1.2,
+                            zorder=4)
+
+    ax_heat.set_xticks(range(n_u))
+    ax_heat.set_xticklabels([f"U{u}" for u in units_sorted], fontsize=7,
+                            rotation=45, ha="right")
+    ax_heat.set_yticks(range(n_w))
+    ax_heat.set_yticklabels([f"W{w}" for w in whiskers], fontsize=9,
+                            fontweight="bold")
+    ax_heat.set_ylabel("Whisker", fontsize=10)
+    ax_heat.tick_params(length=0)
+    ax_heat.set_title("Receptive Field Map  (Δ Hz: [0,5) − [−50,−30) ms)",
+                      fontsize=11, fontweight="bold", pad=6)
+
+    # ── Colour bar ────────────────────────────────────────────────────
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, cax=ax_cbar)
+    cbar.set_label("Δ firing rate (normalized)", fontsize=8)
+    cbar.ax.tick_params(labelsize=7)
+
     path = os.path.join(out_dir, "receptive_field_map.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight")
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"  Saved {path}")
 
