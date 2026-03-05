@@ -1,7 +1,7 @@
 from whiskertoolbox_python import Interval, DigitalIntervalSeries, Point2D
 
 # Names of your mask data
-mask_keys = ["0", "1", "2", "3", "4"]
+mask_keys = ["0", "1", "2", "3"]
 
 # Load MaskData
 masks = [dm.getData(key) for key in mask_keys]
@@ -10,7 +10,7 @@ masks = [dm.getData(key) for key in mask_keys]
 pole = dm.getData("pole")
 
 # Load existing contact intervals
-all_intervals = dm.getData("all")
+all_intervals = dm.getData("all_cleaned")
 
 # Prepare new IntervalSeries for each mask
 mask_intervals = [DigitalIntervalSeries() for _ in masks]
@@ -57,7 +57,7 @@ for interval in all_intervals.toList():
         mask_intervals[closest_idx].addInterval(start_frame, end_frame)
 
 # Register new mask-specific interval series
-time_key = dm.getTimeKey("all")
+time_key = dm.getTimeKey("all_cleaned")
 
 for i in range(len(mask_keys)):
     dm.setData(f"interval_{i}_mask_contact", mask_intervals[i], time_key)

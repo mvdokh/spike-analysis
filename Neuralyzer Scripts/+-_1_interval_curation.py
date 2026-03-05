@@ -1,7 +1,7 @@
 from whiskertoolbox_python import DigitalIntervalSeries
 
 # 1. Load original interval data
-interval_data = dm.getData("interval_0")
+interval_data = dm.getData("collision")
 
 if interval_data:
     
@@ -23,10 +23,10 @@ if interval_data:
             new_intervals.addInterval(new_start, new_end)
     
     # 5. Register new feature using same time base
-    time_key = dm.getTimeKey("interval_0")
-    dm.setData("interval_0_shrunk", new_intervals, time_key)
+    time_key = dm.getTimeKey("collision")
+    dm.setData("collision_shrunk", new_intervals, time_key)
     
-    print("Successfully created 'interval_0_shrunk'")
+    print("Successfully created 'collision_shrunk'")
 
 else:
-    print("Error: 'interval_0' not found.")
+    print("Error: 'collision' not found.")
