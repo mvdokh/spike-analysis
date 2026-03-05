@@ -10,10 +10,10 @@ def intervals_overlap(a_start, a_end, b_start, b_end):
 # ----------------------------
 # Load collision_shrunk
 # ----------------------------
-collision = dm.getData("collision_shrunk")
+collision = dm.getData("collision_all")
 
 if collision is None:
-    print("Error: 'collision_shrunk' not found.")
+    print("Error: 'collision_all' not found.")
 else:
     collision_intervals = collision.toList()
 
@@ -25,7 +25,7 @@ else:
     # ----------------------------
     # Build list of features to clean
     # ----------------------------
-    whiskers = ["0", "1", "2", "3", "4"]
+    whiskers = ["0", "1", "2", "3"]
     feature_names = []
 
     for w in whiskers:

@@ -9,7 +9,7 @@ mask_keys = ["0", "1", "2", "3"]
 
 for i, mask_key in enumerate(mask_keys):
 
-    interval_key = f"interval_{i}_mask_contact"
+    interval_key = f"interval_{i}_mask_contact_no_collision"
 
     mask_data = dm.getData(mask_key)
     interval_data = dm.getData(interval_key)
@@ -60,11 +60,11 @@ for i, mask_key in enumerate(mask_keys):
     # Register results
     time_key = dm.getTimeKey(interval_key)
 
-    dm.setData(f"interval_{i}_mask_contact_protraction",
+    dm.setData(f"interval_{i}_mask_contact_no_collision_protraction",
                protraction_series,
                time_key)
 
-    dm.setData(f"interval_{i}_mask_contact_retraction",
+    dm.setData(f"interval_{i}_mask_contact_no_collision_retraction",
                retraction_series,
                time_key)
 

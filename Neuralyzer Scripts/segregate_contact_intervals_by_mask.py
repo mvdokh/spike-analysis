@@ -10,7 +10,7 @@ masks = [dm.getData(key) for key in mask_keys]
 pole = dm.getData("pole")
 
 # Load existing contact intervals
-all_intervals = dm.getData("all_cleaned")
+all_intervals = dm.getData("all_no_collision")
 
 # Prepare new IntervalSeries for each mask
 mask_intervals = [DigitalIntervalSeries() for _ in masks]
@@ -57,9 +57,9 @@ for interval in all_intervals.toList():
         mask_intervals[closest_idx].addInterval(start_frame, end_frame)
 
 # Register new mask-specific interval series
-time_key = dm.getTimeKey("all_cleaned")
+time_key = dm.getTimeKey("all_no_collision")
 
 for i in range(len(mask_keys)):
-    dm.setData(f"interval_{i}_mask_contact", mask_intervals[i], time_key)
+    dm.setData(f"interval_{i}_mask_contact_no_collision", mask_intervals[i], time_key)
 
 print("Successfully segregated contact intervals by mask.")
