@@ -2,7 +2,7 @@ from whiskertoolbox_python import AnalogTimeSeries
 import statistics
 
 # Retrieve the analog series
-angle_data = dm.getData("line_1_line_angle")
+angle_data = dm.getData("line_0_line_angle")
 
 if angle_data:
 
@@ -10,7 +10,7 @@ if angle_data:
     values = angle_data.toList()
     
     # Retrieve the original time key
-    time_key = dm.getTimeKey("line_1_line_angle")
+    time_key = dm.getTimeKey("line_0_line_angle")
     
     # Use dm to get the time indices for each sample
     # Neuralyzer usually stores analog data as consecutive indices,
@@ -53,9 +53,9 @@ if angle_data:
     new_series = AnalogTimeSeries(clean_values, clean_times)
 
     # Register with same time base
-    dm.setData("line_1_line_angle_IQR", new_series, time_key)
+    dm.setData("line_0_line_angle_IQR", new_series, time_key)
 
-    print("Created cleaned series: line_1_line_angle_IQR")
+    print("Created cleaned series: line_0_line_angle_IQR")
 
 else:
-    print("Error: 'line_1_line_angle' not found.")
+    print("Error: 'line_0_line_angle' not found.")

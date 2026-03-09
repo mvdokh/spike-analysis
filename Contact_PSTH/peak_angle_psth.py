@@ -133,51 +133,63 @@ def align_spikes_to_peaks(spike_times: np.ndarray,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def plot_unit_figure(unit: int,
-                     traces_norm: np.ndarray,
+                     traces_norm,
                      trials: list,
-                     t_ms: np.ndarray,
+                     t_ms,
                      pre_ms: float,
                      post_ms: float,
                      bin_ms: float,
                      output_dir: str,
-                     smooth_bins: int = 3):
+                     smooth_bins: int = 3,
+                     event_label: str = "peak"):
     """
-    Draw three-panel figure for one unit and save to output_dir.
+    Draw figure for one unit and save to output_dir.
 
-        Panel 1 (top)    — overlaid normalised angle traces + bold mean
-        Panel 2 (middle) — spike raster
-        Panel 3 (bottom) — PSTH (mean firing rate, Hz)
+    If traces_norm is not None:
+        3 panels — overlaid angle traces / raster / PSTH
+    Otherwise:
+        2 panels — raster / PSTH
     """
     n_events = len(trials)
+    has_traces = traces_norm is not None
 
-    fig = plt.figure(figsize=(9, 11))
-    fig.subplots_adjust(hspace=0.08, left=0.13, right=0.96,
-                        top=0.94, bottom=0.07)
-    gs = fig.add_gridspec(3, 1, height_ratios=[3, 3, 2])
+    if has_traces:
+        fig = plt.figure(figsize=(9, 11))
+        fig.subplots_adjust(hspace=0.08, left=0.13, right=0.96,
+                            top=0.94, bottom=0.07)
+        gs = fig.add_gridspec(3, 1, height_ratios=[3, 3, 2])
+        ax_traces = fig.add_subplot(gs[0])
+        ax_raster = fig.add_subplot(gs[1], sharex=ax_traces)
+        ax_psth   = fig.add_subplot(gs[2], sharex=ax_traces)
+    else:
+        fig = plt.figure(figsize=(9, 7))
+        fig.subplots_adjust(hspace=0.08, left=0.13, right=0.96,
+                            top=0.94, bottom=0.10)
+        gs = fig.add_gridspec(2, 1, height_ratios=[3, 2])
+        ax_traces = None
+        ax_raster = fig.add_subplot(gs[0])
+        ax_psth   = fig.add_subplot(gs[1], sharex=ax_raster)
 
-    ax_traces = fig.add_subplot(gs[0])
-    ax_raster  = fig.add_subplot(gs[1], sharex=ax_traces)
-    ax_psth    = fig.add_subplot(gs[2], sharex=ax_traces)
+    # ── Panel 1: Normalised angle traces (optional) ──────────────────────────
+    if has_traces:
+        alpha = max(0.08, min(0.35, 15.0 / max(n_events, 1)))
+        for trace in traces_norm:
+            ax_traces.plot(t_ms, trace, color="steelblue", lw=0.5, alpha=alpha)
 
-    # ── Panel 1: Normalised angle traces ─────────────────────────────────────
-    alpha = max(0.08, min(0.35, 15.0 / max(n_events, 1)))
-    for trace in traces_norm:
-        ax_traces.plot(t_ms, trace, color="steelblue", lw=0.5, alpha=alpha)
+        mean_trace = np.nanmean(traces_norm, axis=0)
+        ax_traces.plot(t_ms, mean_trace, color="navy", lw=1.8, zorder=5,
+                       label="mean")
 
-    mean_trace = np.nanmean(traces_norm, axis=0)
-    ax_traces.plot(t_ms, mean_trace, color="navy", lw=1.8, zorder=5,
-                   label="mean")
-
-    ax_traces.axvline(0, color="black", ls="--", lw=0.9, alpha=0.8)
-    ax_traces.set_ylabel("Angle (norm.)", fontsize=10)
-    ax_traces.set_title(f"Unit {unit}  |  {n_events} events", fontsize=12,
-                        fontweight="bold")
-    ax_traces.set_xlim(-pre_ms, post_ms)
-    ax_traces.set_ylim(-0.05, 1.15)
-    ax_traces.legend(fontsize=8, loc="upper right", frameon=False)
-    ax_traces.spines["top"].set_visible(False)
-    ax_traces.spines["right"].set_visible(False)
-    ax_traces.tick_params(labelbottom=False, labelsize=9)
+        ax_traces.axvline(0, color="black", ls="--", lw=0.9, alpha=0.8)
+        ax_traces.set_ylabel("Angle (norm.)", fontsize=10)
+        ax_traces.set_title(f"Unit {unit}  |  {n_events} events", fontsize=12,
+                            fontweight="bold")
+        ax_traces.set_xlim(-pre_ms, post_ms)
+        ax_traces.set_ylim(-0.05, 1.15)
+        ax_traces.legend(fontsize=8, loc="upper right", frameon=False)
+        ax_traces.spines["top"].set_visible(False)
+        ax_traces.spines["right"].set_visible(False)
+        ax_traces.tick_params(labelbottom=False, labelsize=9)
 
     # ── Panel 2: Raster ───────────────────────────────────────────────────────
     for idx, rel_ms in enumerate(trials):
@@ -193,6 +205,9 @@ def plot_unit_figure(unit: int,
     ax_raster.set_ylabel("Trial #", fontsize=10)
     ax_raster.set_ylim(-0.5, n_events - 0.5)
     ax_raster.invert_yaxis()         # trial 0 at top
+    if not has_traces:
+        ax_raster.set_title(f"Unit {unit}  |  {n_events} events", fontsize=12,
+                            fontweight="bold")
     ax_raster.spines["top"].set_visible(False)
     ax_raster.spines["right"].set_visible(False)
     ax_raster.tick_params(labelbottom=False, labelsize=9)
@@ -211,7 +226,7 @@ def plot_unit_figure(unit: int,
                     color="black", edgecolor="none")
 
     ax_psth.axvline(0, color="black", ls="--", lw=0.9, alpha=0.8)
-    ax_psth.set_xlabel("Time from peak (ms)", fontsize=10)
+    ax_psth.set_xlabel(f"Time from {event_label} (ms)", fontsize=10)
     ax_psth.set_ylabel("Firing rate (Hz)", fontsize=10)
     ax_psth.spines["top"].set_visible(False)
     ax_psth.spines["right"].set_visible(False)
@@ -229,7 +244,7 @@ def plot_unit_figure(unit: int,
 
 def run(session_dir: str,
         events_csv: str,
-        angle_csv: str,
+        angle_csv: str | None = None,
         output_dir: str | None = None,
         pre_frames: int = 100,
         post_frames: int = 100,
@@ -237,7 +252,9 @@ def run(session_dir: str,
         smooth_bins: int = 3,
         sampling_rate: int = 30_000,
         sync_channel: int = 1,
-        units: list | None = None):
+        units: list | None = None,
+        max_frame: int | None = None,
+        event_label: str = "peak"):
 
     if output_dir is None:
         output_dir = os.path.join(os.path.dirname(events_csv),
@@ -263,33 +280,41 @@ def run(session_dir: str,
     print(f"Alignment window  : -{pre_ms_f:.1f} ms  …  +{post_ms_f:.1f} ms")
 
     # ── Data ──────────────────────────────────────────────────────────────────
-    events       = load_peak_events(events_csv)
-    angle_series = load_angle_series(angle_csv)
-    spikes_df    = load_spikes(os.path.join(session_dir, "spikes.csv"))
+    events    = load_peak_events(events_csv)
+    spikes_df = load_spikes(os.path.join(session_dir, "spikes.csv"))
 
-    print(f"Peak events       : {len(events)}")
-    print(f"Angle data frames : {len(angle_series)}")
+    # Optional frame cap
+    if max_frame is not None:
+        before = len(events)
+        events = events[events <= max_frame]
+        print(f"max_frame={max_frame}: kept {len(events)} / {before} events")
+
+    print(f"Events            : {len(events)}")
 
     # ── Frame → seconds for event alignment ──────────────────────────────────
     event_times_s = frame_to_seconds(events, frame_samples, sampling_rate)
 
-    # ── Angle traces (frame domain) ───────────────────────────────────────────
-    print("\nExtracting angle traces …")
-    raw_traces  = extract_angle_traces(angle_series, events,
-                                       pre_frames, post_frames)
-    norm_traces = normalize_traces(raw_traces)
+    # ── Angle traces (frame domain) — only when angle_csv provided ───────────
+    norm_traces = None
+    t_ms = None
+    if angle_csv is not None:
+        angle_series = load_angle_series(angle_csv)
+        print(f"Angle data frames : {len(angle_series)}")
+        print("\nExtracting angle traces …")
+        raw_traces  = extract_angle_traces(angle_series, events,
+                                           pre_frames, post_frames)
+        norm_traces = normalize_traces(raw_traces)
 
-    # Drop events where the entire window is missing
-    valid = ~np.all(np.isnan(norm_traces), axis=1)
-    if not valid.all():
-        print(f"  Dropped {(~valid).sum()} events with no angle data.")
-    norm_traces   = norm_traces[valid]
-    event_times_s = event_times_s[valid]
-    n_valid       = int(valid.sum())
+        # Drop events where the entire window is missing
+        valid = ~np.all(np.isnan(norm_traces), axis=1)
+        if not valid.all():
+            print(f"  Dropped {(~valid).sum()} events with no angle data.")
+        norm_traces   = norm_traces[valid]
+        event_times_s = event_times_s[valid]
+        t_ms = np.arange(-pre_frames, post_frames + 1) * ifi_ms
+
+    n_valid = len(event_times_s)
     print(f"  Valid events      : {n_valid}")
-
-    # Shared time axis for all panels (ms from peak)
-    t_ms = np.arange(-pre_frames, post_frames + 1) * ifi_ms
 
     # ── Per-unit figures ──────────────────────────────────────────────────────
     available = sorted(spikes_df["unit"].unique())
@@ -308,7 +333,8 @@ def run(session_dir: str,
         print(f"  {total_spikes} spikes across {n_valid} events")
         plot_unit_figure(unit, norm_traces, trials, t_ms,
                          pre_ms_f, post_ms_f, bin_ms, output_dir,
-                         smooth_bins=smooth_bins)
+                         smooth_bins=smooth_bins,
+                         event_label=event_label)
 
     print(f"\nAll done.  Figures saved to:\n  {output_dir}")
 
@@ -326,8 +352,9 @@ def main():
                    help="Session directory containing digitalin.dat and spikes.csv")
     p.add_argument("--events_csv",    required=True,
                    help="CSV with an 'Event' column (peak frame numbers)")
-    p.add_argument("--angle_csv",     required=True,
-                   help="CSV with 'Time' and 'Data' columns (angle per frame)")
+    p.add_argument("--angle_csv",     default=None,
+                   help="CSV with 'Time' and 'Data' columns (angle per frame). "
+                        "Omit to skip the trace overlay panel.")
     p.add_argument("--output_dir",    default=None,
                    help="Where to save figures (default: <events_csv_dir>/peak_psth_output)")
     p.add_argument("--pre_frames",    type=int,   default=10,
@@ -344,6 +371,10 @@ def main():
                    help="digitalin.dat channel carrying frame-sync TTL (default: 1)")
     p.add_argument("--units",         type=int,   nargs="*", default=None,
                    help="Subset of unit IDs to process (default: all)")
+    p.add_argument("--max_frame",     type=int,   default=None,
+                   help="Only keep events at or below this frame number")
+    p.add_argument("--event_label",   default="peak",
+                   help="X-axis label for alignment point (default: 'peak')")
     args = p.parse_args()
 
     run(
@@ -358,6 +389,8 @@ def main():
         sampling_rate = args.sampling_rate,
         sync_channel  = args.sync_channel,
         units         = args.units,
+        max_frame     = args.max_frame,
+        event_label   = args.event_label,
     )
 
 
