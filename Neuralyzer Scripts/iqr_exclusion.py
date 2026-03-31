@@ -1,25 +1,33 @@
 from whiskertoolbox_python import AnalogTimeSeries
-import statistics
+import math
 
 # Retrieve the analog series
-angle_data = dm.getData("line_0_line_angle")
+angle_data = dm.getData("c2_angle")
 
 if angle_data:
+    raw = angle_data.toList()
+    if not raw:
+        print("Error: 'c2_angle' has no samples.")
+        raise SystemExit
 
-    # Get values and real time indices
-    values = angle_data.toList()
+    # Neuralyzer AnalogTimeSeries commonly returns values-only from toList().
+    # If so, use implicit sample indices to keep full length and ordering.
+    if isinstance(raw[0], (tuple, list)) and len(raw[0]) >= 2:
+        times = [row[0] for row in raw]
+        values = [row[1] for row in raw]
+    else:
+        values = raw
+        times = list(range(len(values)))
     
     # Retrieve the original time key
-    time_key = dm.getTimeKey("line_0_line_angle")
+    time_key = dm.getTimeKey("c2_angle")
     
-    # Use dm to get the time indices for each sample
-    # Neuralyzer usually stores analog data as consecutive indices,
-    # so we'll assume sample index + starting time
-    start_time = 3000  # first frame with data
-    times = list(range(start_time, start_time + len(values)))
-
-    # Compute Q1 and Q3 manually
-    sorted_vals = sorted(values)
+    # Compute IQR from finite values only.
+    finite_vals = [v for v in values if isinstance(v, (int, float)) and math.isfinite(v)]
+    if len(finite_vals) < 4:
+        print("Error: not enough finite samples in 'c2_angle' to compute IQR.")
+        raise SystemExit
+    sorted_vals = sorted(finite_vals)
 
     def percentile(data, p):
         k = (len(data)-1) * (p/100)
@@ -37,25 +45,29 @@ if angle_data:
     lower = q1 - 1.5 * iqr
     upper = q3 + 1.5 * iqr
 
-    # Filter values
+    # Keep every frame and set only outliers to NaN (discontinuous series).
     clean_values = []
-    clean_times = []
-
-    for v, t in zip(values, times):
-        if lower <= v <= upper:
+    outlier_count = 0
+    for v in values:
+        if isinstance(v, (int, float)) and math.isfinite(v) and (lower <= v <= upper):
             clean_values.append(v)
-            clean_times.append(t)
+        elif isinstance(v, (int, float)) and not math.isfinite(v):
+            clean_values.append(float("nan"))
+        else:
+            clean_values.append(float("nan"))
+            outlier_count += 1
 
     print(f"Original samples: {len(values)}")
-    print(f"Filtered samples: {len(clean_values)}")
+    print(f"Outliers replaced with NaN: {outlier_count}")
+    print(f"Output samples (same as input): {len(clean_values)}")
 
     # Create new AnalogTimeSeries
-    new_series = AnalogTimeSeries(clean_values, clean_times)
+    new_series = AnalogTimeSeries(clean_values, times)
 
     # Register with same time base
-    dm.setData("line_0_line_angle_IQR", new_series, time_key)
+    dm.setData("c2_angle_IQR", new_series, time_key)
 
-    print("Created cleaned series: line_0_line_angle_IQR")
+    print("Created cleaned series: c2_angle_IQR")
 
 else:
-    print("Error: 'line_0_line_angle' not found.")
+    print("Error: 'c2_angle' not found.")

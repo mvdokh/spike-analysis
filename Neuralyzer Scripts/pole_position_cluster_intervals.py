@@ -6,7 +6,7 @@ from whiskertoolbox_python import DigitalIntervalSeries
 
 SOURCE_KEY_PREFIX = "pole_static_interval_"
 OUTPUT_KEY_PREFIX = "pole_position_cluster_"
-CLUSTER_DISTANCE_PX = 15.0  # increase if distinct positions are merged; decrease to split
+CLUSTER_DISTANCE_PX = 35.0  # increase if distinct positions are merged; decrease to split
 
 
 def _mean_pole_xy(pole_data, start, end):

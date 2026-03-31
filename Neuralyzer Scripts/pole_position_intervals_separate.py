@@ -11,7 +11,7 @@ else:
         print("No keypoint data found in 'pole'.")
     else:
         JITTER_THRESHOLD = 5.0   # pixels — adjust as needed
-        MIN_INTERVAL_LEN = 5000  # frames
+        MIN_INTERVAL_LEN = 2000  # frames
         FRAME_RANGE_START = 0      # first frame to consider (inclusive)
         FRAME_RANGE_END   = 241750 # last frame to consider (inclusive)
 
