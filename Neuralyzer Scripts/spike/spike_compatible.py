@@ -1,7 +1,7 @@
 import csv
 
-input_path = r"C:\Users\wanglab\Desktop\TG_PT\0112_2\spikes.csv"
-output_path = r"C:\Users\wanglab\Desktop\TG_PT\0112_2\spikes_compatible.csv"
+input_path = r"C:\Users\wanglab\Desktop\TG_PT\0125_1_2\spikes.csv"
+output_path = r"C:\Users\wanglab\Desktop\TG_PT\0125_1_2\spikes_compatible.csv"
 
 with open(input_path, "r") as infile, open(output_path, "w", newline="") as outfile:
     for line in infile:

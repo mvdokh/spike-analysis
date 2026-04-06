@@ -10,7 +10,7 @@ else:
     if not times:
         print("No keypoint data found in 'pole'.")
     else:
-        JITTER_THRESHOLD = 2.0   # pixels — adjust as needed
+        JITTER_THRESHOLD = 5.0   # pixels — adjust as needed
         MIN_INTERVAL_LEN = 1000  # frames
 
         intervals = []
