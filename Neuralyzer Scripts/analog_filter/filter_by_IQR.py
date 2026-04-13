@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-INPUT_FILE  = r"C:\Users\wanglab\Desktop\Club Like Endings\101925_2\mask_to_line\c4_remove_small_connected_components_mask_to_line_line_angle.csv"
+INPUT_FILE  = r"C:\Users\wanglab\Desktop\TG_PT\0124_1_2\c1_remove_small_connected_components_mask_to_line_line_angle.csv"
 IQR_MULTIPLIER = 0.75   # standard multiplier; raise to 3.0 for a looser filter
 # ──────────────────────────────────────────────────────────────────────────────
 
