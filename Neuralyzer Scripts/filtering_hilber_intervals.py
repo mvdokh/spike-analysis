@@ -24,7 +24,7 @@ else:
         end = interval.end
 
         # 1. First check length - virtually free to compute
-        if (end - start) < 300:
+        if (end - start) < 50:
             removed_short += 1
             continue
 
@@ -35,7 +35,7 @@ else:
                 continue
             if t >= end:
                 break
-            if phase_list[i] > 6:
+            if phase_list[i] > 8:
                 bad_phase = True
                 break
 
@@ -49,7 +49,7 @@ else:
     time_key = dm.getTimeKey("c1_angle_outliers_removed_filter_hilbert_phase_interval_detection")
     dm.setData("c1_angle_outliers_removed_filter_hilbert_phase_interval_detection_filtered", new_intervals, time_key)
 
-    print(f"Removed {removed_short} intervals under 300 frames")
+    print(f"Removed {removed_short} intervals under 50 frames")
     print(f"Removed {removed_phase} intervals with Hilbert phase > 6")
     print(f"Kept {kept} intervals")
     print("Saved as 'c1_angle_outliers_removed_filter_hilbert_phase_interval_detection_filtered'")
