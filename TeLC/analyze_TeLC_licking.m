@@ -1,7 +1,8 @@
 %% 
 %% =========================================================================
 %  TeLC Licking Behavior Analysis
-%  Analyzes bottom + side camera CSVs for TeLC08, TeLC09, TeLC11
+%  Analyzes bottom + side camera CSVs: TeLC08/09/11 (IRt) + Phox2b#8/#9 (Jun)
+%  Delete TeLC_licking_metrics.csv after path/cohort changes to force recomputation.
 %
 %  Metrics computed per session (bottom and side separately):
 %    1. Lick rate            (licks / frame, normalised by video frame count)
@@ -32,7 +33,12 @@ if ~exist(output_dir, 'dir'), mkdir(output_dir); end
 %% -------------------------------------------------------------------------
 F = build_file_table();
 
-animal_ids    = {'08','09','11'};
+animal_ids    = {'08','09','11','P8','P9'};
+% Display (titles) and legend strings; out_file_tag avoids special chars in saved filenames
+animal_titles  = {'TeLC08','TeLC09','TeLC11','Phox2b#8','Phox2b#9'};
+animal_leg_str = {'TeLC08','TeLC09','TeLC11','Phox2b#8','Phox2b#9'};
+out_file_tag   = {'TeLC08','TeLC09','TeLC11','Phox2b8','Phox2b9'};
+
 views         = {'bottom','side'};
 metric_fields = {'lick_rate','lick_dur','ILI','bout_rate','licks_per_bout','tongue_area'};
 metric_labels = {'Lick Rate (licks/frame)', ...
@@ -44,9 +50,11 @@ metric_labels = {'Lick Rate (licks/frame)', ...
 
 colors.Pre  = [0.10 0.35 0.70];   % darker blue
 colors.Post = [0.70 0.15 0.12];   % darker red
-anim_colors = [0.00 0.45 0.74;    % TeLC08 (blue)
-               0.85 0.33 0.10;    % TeLC09 (orange)
-               0.49 0.18 0.56];   % TeLC11 (purple)
+anim_colors = [0.00 0.45 0.74;    % TeLC08
+               0.85 0.33 0.10;    % TeLC09
+               0.49 0.18 0.56;    % TeLC11
+               0.00 0.60 0.45;    % Phox2b#8
+               0.40 0.25 0.00];  % Phox2b#9
 dark_col   = [0.08 0.08 0.08];
 
 %% -------------------------------------------------------------------------
@@ -58,6 +66,7 @@ metrics_csv = fullfile(output_dir,'TeLC_licking_metrics.csv');
 
 if isfile(metrics_csv)
     % --- Fast path: metrics already computed, load directly ---
+    % (Delete the CSV to re-run MP4 matching and include new animals/rows.)
     fprintf('Metrics CSV found — loading from disk, skipping parse & MP4 read:\n    %s\n\n', metrics_csv);
     RT = readtable(metrics_csv, 'VariableNamingRule','preserve');
     % Ensure string columns are cell arrays of char (required for strcmp in plots)
@@ -98,14 +107,16 @@ else
 
         fprintf('[%s] [%s] [%s] [%s] ...', animal, condition, sess_lbl, vw);
 
-        % -- Find companion MP4 in same directory --
-        csv_dir  = fileparts(csv_path);
-        mp4_list = dir(fullfile(csv_dir, '*.mp4'));
-        if isempty(mp4_list)
-            fprintf(' SKIP (no MP4)\n');
+        % -- Find companion MP4: same filename prefix as CSV, before _bottom/_side --
+        [mp4_path, n_frames, mp4_ok] = find_companion_mp4(csv_path);
+        if ~mp4_ok
+            if isempty(mp4_path)
+                fprintf(' SKIP (no matching MP4)\n');
+            else
+                fprintf(' SKIP (frame count = 0)  %s\n', mp4_path);
+            end
             continue
         end
-        n_frames = get_frame_count(fullfile(csv_dir, mp4_list(1).name));
         if n_frames == 0
             fprintf(' SKIP (frame count = 0)\n');
             continue
@@ -244,7 +255,7 @@ for vi = 1:numel(views)
         fig = figure('Visible','off','Units','inches','Position',[0 0 14 8],...
                      'Color','w');
         tlo = tiledlayout(2,3,'Padding','compact','TileSpacing','compact');
-        title(tlo, sprintf('TeLC%s | %s view — Session Time-Series', anim, upper(vw)),...
+        title(tlo, sprintf('%s | %s view — Session Time-Series', animal_titles{ai}, upper(vw)),...
               'FontSize',13,'FontWeight','bold');
 
         for mi = 1:numel(metric_fields)
@@ -271,7 +282,7 @@ for vi = 1:numel(views)
             xlim([0.4 n_sess+0.6]);
         end
 
-        fname = fullfile(output_dir, sprintf('01_TeLC%s_%s_timeseries.svg',anim,vw));
+        fname = fullfile(output_dir, sprintf('01_%s_%s_timeseries.svg',out_file_tag{ai},vw));
         save_svg(fig,fname);
         close(fig);
         fprintf('Saved: %s\n', fname);
@@ -305,7 +316,7 @@ for vi = 1:numel(views)
                  'Color','w');
     tlo = tiledlayout(2,3,'Padding','compact','TileSpacing','compact');
     tlo.Position = [0.05 0.14 0.90 0.78];
-    title(tlo, sprintf('TeLC Summary — %s view  (mean ± SEM, n=%d)', ...
+    title(tlo, sprintf('Licking summary — %s view  (mean ± SEM, n=%d animals)', ...
           upper(vw), numel(animal_ids)),'FontSize',13,'FontWeight','bold');
 
     for mi = 1:numel(metric_fields)
@@ -330,7 +341,7 @@ for vi = 1:numel(views)
                               'Color',anim_colors(ai,:),...
                               'MarkerFaceColor',anim_colors(ai,:),...
                               'MarkerSize',6,'LineWidth',1.2,...
-                              'DisplayName',sprintf('TeLC%s',animal_ids{ai}));
+                              'DisplayName',animal_leg_str{ai});
         end
 
         set(gca,'XTick',[1 2],'XTickLabel',{'Pre','Post'},...
@@ -347,7 +358,7 @@ for vi = 1:numel(views)
     % One figure-level legend (compatible with older MATLAB releases that
     % do not accept TiledChartLayout handles in legend()).
     ax_leg = axes(fig, 'Position',[0.15 0.01 0.70 0.06], 'Visible','off', 'Color','w');
-    hleg = legend(ax_leg, legend_handles, strcat('TeLC', animal_ids), ...
+    hleg = legend(ax_leg, legend_handles, animal_leg_str, ...
                   'Orientation','horizontal', 'NumColumns',numel(animal_ids), ...
                   'FontSize',9, 'Box','off', 'Location','north');
     set(hleg, 'TextColor', dark_col);
@@ -397,7 +408,7 @@ for vi = 1:numel(views)
 
             plot(px, y_plot,'-o','Color',anim_colors(ai,:),...
                  'MarkerFaceColor',anim_colors(ai,:),'LineWidth',1.8,...
-                 'MarkerSize',7,'DisplayName',sprintf('TeLC%s',anim));
+                 'MarkerSize',7,'DisplayName',animal_leg_str{ai});
         end
 
         set(gca,'FontSize',9,'Box','off','TickDir','out','Color','w',...
@@ -435,6 +446,44 @@ function n = get_frame_count(mp4_path)
     catch ME
         warning('Could not read frame count from %s:\n  %s', mp4_path, ME.message);
     end
+end
+
+function [mp4_path, n_frames, ok] = find_companion_mp4(csv_path)
+% Find MP4 in the same directory using the same stem prefix as the behavior CSV
+% (text before _bottom_ or _side_behavior_100_3). If none match, use first .mp4.
+    mp4_path = '';
+    n_frames = 0;
+    ok = false;
+    [d, name, ~] = fileparts(csv_path);
+    tok = regexpi(name, '^(.*)_(?:bottom|side)_behavior_100_3$', 'tokens', 'once');
+    prefix = '';
+    if ~isempty(tok)
+        prefix = tok{1};
+    end
+    L = dir(fullfile(d, '*.mp4'));
+    if isempty(L)
+        return
+    end
+    [~, order] = sort({L.name});
+    L = L(order);
+    pick = '';
+    if ~isempty(prefix)
+        for k = 1:numel(L)
+            if startsWith(L(k).name, prefix, 'IgnoreCase', true)
+                pick = L(k).name;
+                break
+            end
+        end
+    end
+    if isempty(pick)
+        if ~isempty(prefix)
+            warning('No MP4 starting with "%s" in %s — using first .mp4', prefix, d);
+        end
+        pick = L(1).name;
+    end
+    mp4_path = fullfile(d, pick);
+    n_frames = get_frame_count(mp4_path);
+    ok = n_frames > 0;
 end
 
 function save_svg(fig, fpath)
@@ -475,7 +524,12 @@ function c = mix_with_white(c0, keep)
 end
 
 function F = build_file_table()
-% Returns a table with metadata parsed from the hardcoded path list.
+% TeLC (IRt) + Jun Phox2b cohorts in one file table.
+    F = vertcat(build_irT_telc_file_table(), build_phox2b_file_table());
+end
+
+function F = build_irT_telc_file_table()
+% Returns a table with metadata parsed from the hardcoded TeLC path list.
 
     raw = { ...
         'C:\Users\wanglab\Desktop\Ina\IRt_TeLC\IRt_TeLC08_Pre\IRt_TeLC08_pre_2026_03_31_bottom_behavior_100_3.csv'; ...
@@ -556,4 +610,43 @@ function F = build_file_table()
 
     F = table(animal, condition, sess_lbl, view, raw, ...
               'VariableNames',{'animal','condition','session_label','view','csv_path'});
+end
+
+function F = build_phox2b_file_table()
+% Jun_TeLC_Data/Phox2b#8 and Phox2b#9 — Pre: 7/19 (#8) and 7/21 (#9); Post: 8/08 and 8/10; no 8/10 bottom.
+% Session labels are YYYY_MM_DD for sortable time series (Pre, Post, Post+1).
+    jbase = 'C:\Users\wanglab\Desktop\Ina\Jun_TeLC_Data';
+    P8 = fullfile(jbase, 'Phox2b#8');
+    P9 = fullfile(jbase, 'Phox2b#9');
+
+    raw  = { ...
+        fullfile(P8,'Phox2B#8_20220719_1_bottom_behavior_100_3.csv');
+        fullfile(P8,'Phox2B#8_20220719_1_side_behavior_100_3.csv');
+        fullfile(P8,'Phox2b_#8_teLC_20220808_1_350fps_bottom_behavior_100_3.csv');
+        fullfile(P8,'Phox2b_#8_teLC_20220808_1_350fps_side_behavior_100_3.csv');
+        fullfile(P8,'Phox2B#8_20220810_1_side_behavior_100_3.csv');
+        fullfile(P9,'Phox2B#9_20220721_1_bottom_behavior_100_3.csv');
+        fullfile(P9,'Phox2B#9_20220721_1_side_behavior_100_3.csv');
+        fullfile(P9,'Phox2b_#9_teLC_20220808_1_350fps_bottom_behavior_100_3.csv');
+        fullfile(P9,'Phox2b_#9_teLC_20220808_1_350fps_side_behavior_100_3.csv');
+        fullfile(P9,'Phox2B#9_20220810_1_side_behavior_100_3.csv');
+        };
+
+    % animal id token used in RT: P8, P9
+    animal   = {
+        'P8';'P8';'P8';'P8';'P8';
+        'P9';'P9';'P9';'P9';'P9'};
+
+    % Pre: 20220719 (#8), 20220721 (#9) — Post: 20220808, 20220810
+    cond = {
+        'Pre';'Pre';'Post';'Post';'Post';
+        'Pre';'Pre';'Post';'Post';'Post'};
+
+    slbl = {
+        '2022_07_19';'2022_07_19';'2022_08_08';'2022_08_08';'2022_08_10';
+        '2022_07_21';'2022_07_21';'2022_08_08';'2022_08_08';'2022_08_10'};
+
+    vview = {'bottom';'side';'bottom';'side';'side';'bottom';'side';'bottom';'side';'side'};
+    F = table(animal, cond, slbl, vview, raw, ...
+        'VariableNames',{'animal','condition','session_label','view','csv_path'});
 end
