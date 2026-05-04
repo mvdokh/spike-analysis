@@ -1,2 +1,3 @@
 line_curation/lines_output.csv
 line_curation/lines_output_clean.csv
+*.svg

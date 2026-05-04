@@ -4,12 +4,12 @@ function keypoint_position_heatmap
 % AXIS_MIN, AXIS_MAX; default 0-256). Binning ignores keypoint extent. Each detection splats as a
 % truncated 2-D Gaussian (support clipped at GAUSS_TRUNC_BINS in bin units).
 %
-% Figure 1: all keypoints. Figure 2: max-extension points only (per bout).
+% Figure 1: all keypoints. Figure 2: max-extension points only (per lick segment).
 %
 % CSV columns: Frame, X, Y, Probability (header row recommended).
 %
-% Bout rule: sort by Frame; a new bout starts where gap exceeds GAP_FRAMES.
-% Maximum extension within a bout: farthest-from-onset vs farthest-from-offset by Euclidean
+% Lick-segment rule: sort by Frame; a new segment starts where gap exceeds GAP_FRAMES.
+% Maximum extension within a segment: farthest-from-onset vs farthest-from-offset by Euclidean
 % distance; keep whichever distance is larger (ties use onset-based).
 
 close all
@@ -24,8 +24,6 @@ csvPaths = {
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_02\2024_1223\keypoints.csv"
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_07\2025_0401\keypoints.csv"
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_07\2025_0403\keypoints.csv"
-    "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0321\keypoints.csv"
-    "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0326\keypoints.csv"
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0401\keypoints.csv"
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0403\keypoints.csv"
     "C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_09\2025_0514\keypoints.csv"
@@ -109,12 +107,14 @@ for k = 1:numel(csvPaths)
     H_ext = gaussianSplat2d(extX, extY, xMin, xMax, yMin, yMax, GRID_SIZE, ...
         GAUSS_SIGMA_BINS, GAUSS_TRUNC_BINS);
 
+    [jawRefX, jawRefY] = jawReferenceFromSession(csvFile, PROB_MIN);
     outDir = fileparts(csvFile);
     outStem = outputStemFromCsv(csvFile);
 
     f1 = figure('Name', sprintf('All keypoints — %s', outStem), ...
         'NumberTitle', 'off', 'Color', 'w', 'Position', [80 420 560 520]);
     plotHeatmap(H_all, xMin, xMax, yMin, yMax, USE_LOG_DISPLAY);
+    overlayReferencePoint(gca, jawRefX, jawRefY, xMin, xMax, yMin, yMax, GRID_SIZE);
     title(sprintf('All positions — %s', outStem), 'Interpreter', 'none', 'Color', 'k');
     if SAVE_SVG
         exportHeatmapSvg(f1, fullfile(outDir, sprintf('%s_heatmap_all.svg', outStem)));
@@ -123,7 +123,8 @@ for k = 1:numel(csvPaths)
     f2 = figure('Name', sprintf('Max extension only — %s', outStem), ...
         'NumberTitle', 'off', 'Color', 'w', 'Position', [660 420 560 520]);
     plotHeatmap(H_ext, xMin, xMax, yMin, yMax, USE_LOG_DISPLAY);
-    title(sprintf('Max-extension points only (%d bouts) — %s', ...
+    overlayReferencePoint(gca, jawRefX, jawRefY, xMin, xMax, yMin, yMax, GRID_SIZE);
+    title(sprintf('Max-extension points only (%d licks) — %s', ...
         numel(extX), outStem), 'Interpreter', 'none', 'Color', 'k');
     if SAVE_SVG
         exportHeatmapSvg(f2, fullfile(outDir, sprintf('%s_heatmap_max_extension_only.svg', outStem)));
@@ -142,6 +143,47 @@ function outStem = outputStemFromCsv(csvFile)
         [~, outStem, ~] = fileparts(csvFile);
     end
     outStem = regexprep(outStem, '[^A-Za-z0-9_-]', '_');
+end
+
+
+function [jawX, jawY] = jawReferenceFromSession(csvFile, probMin)
+    jawX = NaN;
+    jawY = NaN;
+    sessionDir = fileparts(csvFile);
+    jawFiles = dir(fullfile(sessionDir, '*_bottom_view_jaw.csv'));
+    if isempty(jawFiles)
+        warning('No *_bottom_view_jaw.csv found in session folder: %s', sessionDir);
+        return
+    end
+    names = sort({jawFiles.name});
+    jawFile = fullfile(sessionDir, names{1});
+    if numel(names) > 1
+        warning('Multiple *_bottom_view_jaw.csv found in %s; using %s', sessionDir, names{1});
+    end
+
+    jawTbl = readKeypointsCsv(jawFile);
+    if height(jawTbl) < 1
+        warning('Jaw CSV has no data rows (empty): %s', jawFile);
+        return
+    end
+
+    % Optional filter: same PROB_MIN as tongue. When <=0 or non-scalar, use all rows.
+    if isempty(probMin) || (~isscalar(probMin)) || probMin <= 0
+        keep = true(height(jawTbl), 1);
+    else
+        keep = jawTbl.Probability >= probMin;
+        if ~any(keep)
+            warning(['No jaw rows left after Probability >= PROB_MIN (PROB_MIN=%g). ' ...
+                'Lower PROB_MIN or fix jaw CSV: %s'], probMin, jawFile);
+            return
+        end
+    end
+
+    jawX = mean(jawTbl.X(keep), 'omitnan');
+    jawY = mean(jawTbl.Y(keep), 'omitnan');
+    if isnan(jawX) || isnan(jawY)
+        warning('Jaw reference mean is NaN in %s', jawFile);
+    end
 end
 
 
@@ -292,4 +334,19 @@ function plotHeatmap(H, xMin, xMax, yMin, yMax, useLog)
     cb.Label.String = cbLbl;
     cb.Label.Interpreter = 'none';
     cb.Label.Color = 'k';
+end
+
+
+function overlayReferencePoint(ax, refX, refY, xMin, xMax, yMin, yMax, n)
+    if isnan(refX) || isnan(refY)
+        return
+    end
+    dx = max(xMax - xMin, eps);
+    dy = max(yMax - yMin, eps);
+    cx = (refX - xMin) ./ dx .* n + 0.5;
+    cy = (refY - yMin) ./ dy .* n + 0.5;
+    hold(ax, 'on');
+    plot(ax, cx, cy, 'wo', 'MarkerSize', 9, 'LineWidth', 1.5);
+    plot(ax, cx, cy, 'kx', 'MarkerSize', 8, 'LineWidth', 1.2);
+    hold(ax, 'off');
 end
