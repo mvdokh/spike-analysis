@@ -1,18 +1,16 @@
-function lick_trajectory_phase_density_overlay
-% lick_trajectory_phase_density_overlay
+function lick_trajectory_phase_density_overlay_by_animal
+% lick_trajectory_phase_density_overlay_by_animal
 %
-% Jaw-centered pooled tongue trajectories only (no density background). Segments are drawn as
-% colored line pieces; color is intra-lick phase (0 = first frame of lick, 1 = last frame).
+% Jaw-centered pooled tongue trajectories plotted separately for each animal
+% within each experiment. One SVG is written per experiment, with one subplot
+% per animal.
 %
-% Licks: sort keypoints by Frame; start a new lick where consecutive frame gap > GAP_FRAMES.
-% Only licks with at least MIN_LICK_FRAMES keypoint rows are kept.
-%
-% Edit csv lists below. Run: lick_trajectory_phase_density_overlay
+% Edit csv lists below. Run: lick_trajectory_phase_density_overlay_by_animal
 
 close all
 
 %% =======================================================================
-%% CONFIG (match jaw_centered_pooled_heatmap.m)
+%% CONFIG
 %% =======================================================================
 
 csvPaths_PCRt = {
@@ -48,12 +46,9 @@ csvPaths_IRt = {
 
 PROB_MIN = 0;
 GAP_FRAMES = 8;
-
-% Minimum number of keypoint rows (frames with detections) per lick segment.
 MIN_LICK_FRAMES = 5;
 
 REL_EXTENT_HALF = 128;
-
 DRAW_SEGMENT_LINES = true;
 LINE_WIDTH = 1.15;
 
@@ -72,38 +67,125 @@ xMax = REL_EXTENT_HALF;
 yMin = -REL_EXTENT_HALF;
 yMax = REL_EXTENT_HALF;
 
-plotOneGroup(csvPaths_PCRt, 'PCRt_BiPoles', 'PCRt', PROB_MIN, GAP_FRAMES, MIN_LICK_FRAMES, ...
+plotOneExperimentByAnimal(csvPaths_PCRt, 'PCRt_BiPoles', 'PCRt', PROB_MIN, GAP_FRAMES, MIN_LICK_FRAMES, ...
     xMin, xMax, yMin, yMax, DRAW_SEGMENT_LINES, LINE_WIDTH, OUTPUT_DIR, SAVE_SVG);
 
-plotOneGroup(csvPaths_IRt, 'IRt_BiPoles', 'IRt', PROB_MIN, GAP_FRAMES, MIN_LICK_FRAMES, ...
+plotOneExperimentByAnimal(csvPaths_IRt, 'IRt_BiPoles', 'IRt', PROB_MIN, GAP_FRAMES, MIN_LICK_FRAMES, ...
     xMin, xMax, yMin, yMax, DRAW_SEGMENT_LINES, LINE_WIDTH, OUTPUT_DIR, SAVE_SVG);
 
 end
 
 
-function plotOneGroup(csvList, groupTag, shortTag, probMin, gapFrames, minLickFrames, ...
+function plotOneExperimentByAnimal(csvList, groupTag, shortTag, probMin, gapFrames, minLickFrames, ...
     xMin, xMax, yMin, yMax, drawLines, lineW, outDir, saveSvg)
-    nSessions = 0;
+
+    animalGroups = groupCsvFilesByAnimal(csvList);
+    if isempty(animalGroups)
+        warning('No valid CSV files found for %s.', groupTag);
+        return
+    end
 
     cmapPhase = phaseColormap256();
+    nAnimals = numel(animalGroups);
+    nCol = 2;
+    nRow = ceil(nAnimals / nCol);
 
-    fig = figure('Name', sprintf('Lick trajectory phase (%s)', groupTag), ...
-        'NumberTitle', 'off', 'Color', 'w', ...
-        'Position', [80 80 660 580]);
-    ax = axes(fig);
-    set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
-    axis(ax, [xMin xMax yMin yMax]);
-    axis(ax, 'image');
-    set(ax, 'YDir', 'reverse');
-    colormap(ax, cmapPhase);
-    caxis(ax, [0 1]);
+    figW = min(260 + 360 * nCol, 2200);
+    figH = min(220 + 280 * nRow, 1800);
+    fig = figure('Name', sprintf('Lick trajectory phase by animal (%s)', groupTag), ...
+        'NumberTitle', 'off', 'Color', 'w', 'Position', [80 80 figW figH]);
 
-    xlabel(ax, 'X relative to jaw (pixels)', 'Interpreter', 'none');
-    ylabel(ax, 'Y relative to jaw (pixels)', 'Interpreter', 'none');
-    hold(ax, 'on');
+    tl = tiledlayout(fig, nRow, nCol, 'Padding', 'compact', 'TileSpacing', 'compact');
+    title(tl, sprintf('Intra-lick trajectories by animal (%s)', groupTag), ...
+        'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 14, 'Color', 'k');
 
-    cx0 = 0;
-    cy0 = 0;
+    colormap(fig, cmapPhase);
+
+    for i = 1:nAnimals
+        ax = nexttile(tl);
+        set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
+        axis(ax, 'equal');
+        axis(ax, 'square');
+        set(ax, 'YDir', 'reverse');
+        caxis(ax, [0 1]);
+        hold(ax, 'on');
+
+        animalLabel = animalGroups(i).label;
+        csvFiles = animalGroups(i).files;
+        nSessions = 0;
+
+        for k = 1:numel(csvFiles)
+            csvFile = csvFiles{k};
+            if ~isfile(csvFile)
+                continue
+            end
+
+            [lickX, lickY, lickPhase] = sessionSortedTrajectoryPoints(csvFile, probMin, gapFrames, minLickFrames);
+            if isempty(lickX)
+                continue
+            end
+            nSessions = nSessions + 1;
+
+            for j = 1:numel(lickX)
+                xs = lickX{j};
+                ys = lickY{j};
+                ph = lickPhase{j};
+                if isempty(xs)
+                    continue
+                end
+
+                if drawLines && numel(xs) > 1
+                    pmid = (ph(1:end-1) + ph(2:end)) / 2;
+                    lineColors = rgbFromPhase(pmid, cmapPhase);
+                    for ii = 1:(numel(xs) - 1)
+                        plot(ax, xs(ii:ii + 1), ys(ii:ii + 1), '-', ...
+                            'Color', lineColors(ii, :), 'LineWidth', lineW);
+                    end
+                end
+
+                scatter(ax, xs, ys, 16, ph, 'filled', ...
+                    'MarkerFaceAlpha', 0.95, 'MarkerEdgeColor', 'none');
+            end
+        end
+
+        plot(ax, 0, 0, 'ws', 'MarkerSize', 14, 'LineWidth', 2.6, 'MarkerFaceColor', 'none');
+        plot(ax, 0, 0, 'ks', 'MarkerSize', 12, 'LineWidth', 2, 'MarkerFaceColor', 'none');
+        plot(ax, 0, 0, 'w+', 'MarkerSize', 18, 'LineWidth', 2.8);
+        plot(ax, 0, 0, 'k+', 'MarkerSize', 16, 'LineWidth', 2.2);
+
+        xlim(ax, [xMin xMax]);
+        ylim(ax, [yMin yMax]);
+        xticks(ax, [xMin 0 xMax]);
+        yticks(ax, [yMin 0 yMax]);
+
+        title(ax, sprintf('%s (%d sessions)', animalLabel, nSessions), ...
+            'Interpreter', 'none', 'Color', 'k', 'FontSize', 10);
+        xlabel(ax, 'X relative to jaw (pixels)', 'Interpreter', 'none');
+        ylabel(ax, 'Y relative to jaw (pixels)', 'Interpreter', 'none');
+        hold(ax, 'off');
+    end
+
+    cb = colorbar;
+    cb.Layout.Tile = 'east';
+    cb.Color = 'k';
+    cb.Label.String = 'Intra-lick phase (0=start, 1=end)';
+    cb.Label.Interpreter = 'none';
+
+    if saveSvg
+        outPath = fullfile(outDir, sprintf('lick_trajectory_phase_by_animal_%s', shortTag));
+        try
+            exportgraphics(fig, [outPath '.svg'], 'ContentType', 'vector');
+        catch %#ok<*CTCH>
+            print(fig, [outPath '.svg'], '-dsvg', '-painters');
+        end
+        fprintf('Wrote %s.svg\n', outPath);
+    end
+end
+
+
+function groups = groupCsvFilesByAnimal(csvList)
+    groups = struct('label', {}, 'files', {});
+    labelToIndex = containers.Map('KeyType', 'char', 'ValueType', 'double');
 
     for k = 1:numel(csvList)
         csvFile = csvList{k};
@@ -111,64 +193,30 @@ function plotOneGroup(csvList, groupTag, shortTag, probMin, gapFrames, minLickFr
             continue
         end
 
-        [lickX, lickY, lickPhase] = sessionSortedTrajectoryPoints(csvFile, probMin, gapFrames, minLickFrames);
-        if isempty(lickX)
+        animalLabel = animalLabelFromCsv(csvFile);
+        if isempty(animalLabel)
             continue
         end
-        nSessions = nSessions + 1;
 
-        for j = 1:numel(lickX)
-            xs = lickX{j};
-            ys = lickY{j};
-            ph = lickPhase{j};
-            if isempty(xs)
-                continue
-            end
-
-            if drawLines && numel(xs) > 1
-                pmid = (ph(1:end-1) + ph(2:end)) / 2;
-                lineColors = rgbFromPhase(pmid, cmapPhase);
-                for ii = 1:(numel(xs) - 1)
-                    plot(ax, xs(ii:ii + 1), ys(ii:ii + 1), '-', ...
-                        'Color', lineColors(ii, :), 'LineWidth', lineW);
-                end
-            end
-
-            scatter(ax, xs, ys, 16, ph, 'filled', ...
-                'MarkerFaceAlpha', 0.95, 'MarkerEdgeColor', 'none');
+        if isKey(labelToIndex, animalLabel)
+            idx = labelToIndex(animalLabel);
+            groups(idx).files{end + 1} = csvFile; %#ok<AGROW>
+        else
+            idx = numel(groups) + 1;
+            labelToIndex(animalLabel) = idx;
+            groups(idx).label = animalLabel;
+            groups(idx).files = {csvFile};
         end
     end
+end
 
-    title(ax, sprintf(['Intra-lick trajectories only (%d sessions) — %s'], ...
-        nSessions, groupTag), 'Interpreter', 'none', 'FontSize', 11, 'Color', 'k');
 
-    % Jaw reference on top (+ and box only).
-    plot(ax, cx0, cy0, 'ws', 'MarkerSize', 14, 'LineWidth', 2.6, 'MarkerFaceColor', 'none');
-    plot(ax, cx0, cy0, 'ks', 'MarkerSize', 12, 'LineWidth', 2, 'MarkerFaceColor', 'none');
-    plot(ax, cx0, cy0, 'w+', 'MarkerSize', 18, 'LineWidth', 2.8);
-    plot(ax, cx0, cy0, 'k+', 'MarkerSize', 16, 'LineWidth', 2.2);
-
-    % enforce jaw-centered fixed window and ticks
-    xlim(ax, [xMin xMax]);
-    ylim(ax, [yMin yMax]);
-    xticks(ax, [xMin 0 xMax]);
-    yticks(ax, [yMin 0 yMax]);
-
-    hold(ax, 'off');
-
-    cb = colorbar(ax);
-    cb.Color = 'k';
-    cb.Label.String = 'Intra-lick phase (0=start, 1=end)';
-    cb.Label.Interpreter = 'none';
-
-    if saveSvg
-        outPath = fullfile(outDir, sprintf('lick_trajectory_phase_only_%s', shortTag));
-        try
-            exportgraphics(fig, [outPath '.svg'], 'ContentType', 'vector');
-        catch %#ok<*CTCH>
-            print(fig, [outPath '.svg'], '-dsvg', '-painters');
-        end
-        fprintf('Wrote %s.svg\n', outPath);
+function label = animalLabelFromCsv(csvFile)
+    token = regexp(csvFile, '(PCRt|IRt)_[0-9]+', 'match', 'once');
+    if isempty(token)
+        label = '';
+    else
+        label = token;
     end
 end
 
@@ -191,7 +239,6 @@ end
 
 
 function [lickX, lickY, lickPhase] = sessionSortedTrajectoryPoints(csvFile, probMin, gapFrames, minLickFrames)
-
     lickX = {};
     lickY = {};
     lickPhase = {};
