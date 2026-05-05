@@ -1,0 +1,26 @@
+sessionId,csvPath,group,nKeypoints,pctHeatmapY,pctHeatmapX
+PCRt_02 / 2024_1206,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_02\2024_1206\keypoints.csv,PCRt,1250,1.28186226605451,79.7528391236606
+PCRt_02 / 2024_1218,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_02\2024_1218\keypoints.csv,PCRt,1780,0.0292590857533371,85.3682596917365
+PCRt_02 / 2024_1223,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_02\2024_1223\keypoints.csv,PCRt,1567,0.00135977575935182,94.1985876468482
+PCRt_07 / 2025_0401,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_07\2025_0401\keypoints.csv,PCRt,2498,1.22493435886453,67.8499071595695
+PCRt_07 / 2025_0403,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_07\2025_0403\keypoints.csv,PCRt,2564,0.241189176341738,64.4076599391453
+PCRt_08 / 2025_0401,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0401\keypoints.csv,PCRt,1603,2.31147812513094,97.6555385212313
+PCRt_08 / 2025_0403,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_08\2025_0403\keypoints.csv,PCRt,1831,2.6568571404685,99.3257151182159
+PCRt_09 / 2025_0514,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_09\2025_0514\keypoints.csv,PCRt,2799,0.0636451169292505,41.0257932570586
+PCRt_09 / 2025_0515,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_09\2025_0515\keypoints.csv,PCRt,2807,0.328231754794184,54.6692493091148
+PCRt_09 / 2025_0516,C:\Users\wanglab\Desktop\Ina\PCRt_BiPoles\PCRt_09\2025_0516\keypoints.csv,PCRt,5648,0.653962876839907,63.6460250423156
+IRt_01 / 2025_0425,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_01\2025_0425\keypoints.csv,IRt,2643,0.490481977031559,97.5290411507429
+IRt_01 / 2025_0514,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_01\2025_0514\keypoints.csv,IRt,1514,13.8923034697611,99.7409462251097
+IRt_01 / 2025_0515,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_01\2025_0515\keypoints.csv,IRt,2001,14.767549972275,99.9809775267867
+IRt_01 / 2025_0516,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_01\2025_0516\keypoints.csv,IRt,2645,34.9328805945863,98.9379113145797
+IRt_02 / 2025_0425,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_02\2025_0425\keypoints.csv,IRt,91,98.8357754593354,100
+IRt_02 / 2025_0514,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_02\2025_0514\keypoints.csv,IRt,134,80.6154214667956,100
+IRt_02 / 2025_0515,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_02\2025_0515\keypoints.csv,IRt,508,95.0016963477374,100
+IRt_02 / 2025_0516,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_02\2025_0516\keypoints.csv,IRt,375,86.833601702042,100
+IRt_03 / 2025_0425,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_03\2025_0425\keypoints.csv,IRt,715,64.5915448384431,100
+IRt_09 / 2026_0113,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_09\2026_0113\keypoints.csv,IRt,2262,1.00176669312517,35.5500194392103
+IRt_09 / 2026_0116,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_09\2026_0116\keypoints.csv,IRt,3040,5.90160728456075,46.6534794939332
+IRt_09 / 2026_0112,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_09\2026_0112\keypoints.csv,IRt,2360,1.07540333672764,60.6010240643932
+IRt_10 / 2026_0113,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_10\2026_0113\keypoints.csv,IRt,3538,0.954163621875554,92.762812698925
+IRt_10 / 2026_0116,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_10\2026_0116\keypoints.csv,IRt,4506,0.254152566166207,52.2808778802409
+IRt_10 / 2026_0112,C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\IRt_10\2026_0112\keypoints.csv,IRt,4426,0.946688565700556,90.3932839933871
