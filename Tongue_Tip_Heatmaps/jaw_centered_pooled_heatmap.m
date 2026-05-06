@@ -179,11 +179,6 @@ function plotSinglePooledHeatmap(H, xMin, xMax, yMin, yMax, titleTxt, useLog, ou
     hold(ax, 'on');
     cx0 = (0 - xMin) / (xMax - xMin) * nt + 0.5;
     cy0 = (0 - yMin) / (yMax - yMin) * nt + 0.5;
-    th = linspace(0, 2 * pi, 72);
-    rIn = 6.5;
-    rOut = 10.5;
-    plot(ax, cx0 + rIn * cos(th), cy0 + rIn * sin(th), '-', 'Color', 'w', 'LineWidth', 2.6);
-    plot(ax, cx0 + rOut * cos(th), cy0 + rOut * sin(th), '-', 'Color', 'k', 'LineWidth', 2);
     plot(ax, cx0, cy0, 'ws', 'MarkerSize', 14, 'LineWidth', 2.6, 'MarkerFaceColor', 'none');
     plot(ax, cx0, cy0, 'ks', 'MarkerSize', 12, 'LineWidth', 2, 'MarkerFaceColor', 'none');
     plot(ax, cx0, cy0, 'w+', 'MarkerSize', 18, 'LineWidth', 2.8);
