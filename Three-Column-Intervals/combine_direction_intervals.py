@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import pandas as pd
 
+
+# Edit these paths in one place before running the script.
+INPUT_FOLDER = Path(r"H:\.shortcut-targets-by-id\17tfqA28bUKBm67DoeFcz3RtG8jqNNu4B\NTNG1-PrV-Piezo\P005\102625_1\contact\0")
+PROTRACTION_CSV = INPUT_FOLDER / "0_protraction.csv"
+RETRACTION_CSV = INPUT_FOLDER / "0_retraction.csv"
+OUTPUT_CSV = INPUT_FOLDER / "direction.csv"
 
 OUTPUT_COLUMNS = ["Contact Start", "Contact End", "Direction"]
 
@@ -38,31 +43,8 @@ def combine_interval_files(protraction_csv: Path, retraction_csv: Path, output_c
     return output_csv
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Combine protraction and retraction interval CSVs into a three-column CSV."
-    )
-    parser.add_argument("protraction_csv", type=Path, help="Path to the protraction interval CSV")
-    parser.add_argument("retraction_csv", type=Path, help="Path to the retraction interval CSV")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Output CSV path. Defaults to direction.csv in the input folder.",
-    )
-    return parser
-
-
 def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-
-    if args.output is None:
-        output_csv = args.protraction_csv.parent / "direction.csv"
-    else:
-        output_csv = args.output
-
-    saved_path = combine_interval_files(args.protraction_csv, args.retraction_csv, output_csv)
+    saved_path = combine_interval_files(PROTRACTION_CSV, RETRACTION_CSV, OUTPUT_CSV)
     print(f"Saved combined intervals to {saved_path}")
 
 
