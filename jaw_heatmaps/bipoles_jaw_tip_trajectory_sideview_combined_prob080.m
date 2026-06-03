@@ -47,8 +47,8 @@ LASER_MODE = 'on';       % 'on' | 'off' | 'all'  (see readLickIntervalsByLaser)
 FIRST_LICK_PER_LASER = true;  % one trajectory per laser pulse (first lick only)
 PROB_MIN = 0.80;         % minimum jaw-tip Probability (model confidence)
 MIN_LICK_FRAMES = 2;     % skip licks shorter than this many high-prob frames
-AXIS_MIN = 0;            % pixel-space axis bounds (full frame, not zoomed)
-AXIS_MAX = 256;
+LICK_FRAME_PAD = 10;     % extra frames before/after behavior lick Start/End
+PLOT_HALF = 50;          % 100x100 centered on session jaw rest
 DRAW_SEGMENT_LINES = true;
 DRAW_SCATTER = true;
 LINE_WIDTH = 1.0;
@@ -100,12 +100,16 @@ for e = 1:numel(experiments)
             continue
         end
 
-        [sx, sy, sp, sf] = jawLickTrajectories(jawFile, intervals, PROB_MIN, MIN_LICK_FRAMES);
+        [sx, sy, sp, sf] = extractJawLickTrajectories(jawFile, intervals, PROB_MIN, ...
+            MIN_LICK_FRAMES, LICK_FRAME_PAD, true);
         if isempty(sx)
             continue
         end
         fprintf('  + %s : %d laser-%s licks (prob >= %.2f)\n', ...
             meta.base, numel(sx), LASER_MODE, PROB_MIN);
+
+        [jx, jy] = jawSessionRestXY(jawFile, PROB_MIN);
+        [sx, sy] = centerLickCells(sx, sy, jx, jy);
 
         ci = numel(cells) + 1;
         cells(ci).animal = meta.animal;
@@ -143,8 +147,8 @@ for e = 1:numel(experiments)
     fig = figure('Visible', 'off', 'Color', 'w', 'Position', [60 60 figW figH]);
     tl = tiledlayout(fig, nRows, nCols, 'Padding', 'compact', 'TileSpacing', 'compact');
     colormap(fig, cmapPhase);
-    title(tl, sprintf('%s  —  side view, prob >= %.2f (laser-%s)   [rows = animal, cols = session]', ...
-        expTag, PROB_MIN, upper(LASER_MODE)), ...
+    title(tl, sprintf('%s — jaw trajectory during laser-ON lick (prob >= %.2f, side view)   [rows = animal, cols = session]', ...
+        expTag, PROB_MIN), ...
         'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 13, 'Color', 'k');
 
     for r = 1:nRows
@@ -157,15 +161,16 @@ for e = 1:numel(experiments)
             end
             cc = cells(idxs(c));
 
+            setupCenteredJawAxes(ax, PLOT_HALF, cmapPhase);
             drawTile(ax, cc.lickX, cc.lickY, cc.lickPhase, cc.lickFrame, cmapPhase, ...
-                DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE);
-            setupTileAxes(ax, AXIS_MIN, AXIS_MAX, cmapPhase);
+                DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE, PLOT_HALF);
 
             if c == 1
                 ylabel(ax, animals{r}, 'FontWeight', 'bold', 'FontSize', 10, ...
                     'Color', 'k', 'Interpreter', 'none');
             end
-            title(ax, {cc.dateLabel, sprintf('%d licks', numel(cc.lickX))}, ...
+            title(ax, {cc.dateLabel, 'Jaw trajectory during laser-ON lick', ...
+                sprintf('%d licks', numel(cc.lickX))}, ...
                 'FontSize', 8, 'Color', 'k', 'Interpreter', 'none');
         end
     end
@@ -195,11 +200,8 @@ end
 %% Rendering
 %% =======================================================================
 
-function drawTile(ax, lickX, lickY, lickPhase, lickFrame, cmapPhase, drawLines, drawScatter, lineW, markerSize)
-set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
+function drawTile(ax, lickX, lickY, lickPhase, lickFrame, cmapPhase, drawLines, drawScatter, lineW, markerSize, plotHalf)
 hold(ax, 'on');
-colormap(ax, cmapPhase);
-caxis(ax, [0 1]);
 
 scatX = [];
 scatY = [];
@@ -214,7 +216,7 @@ for j = 1:numel(lickX)
         continue
     end
     if drawLines && numel(xs) > 1
-        draw_phase_line_frame_gaps(ax, xs, ys, ph, fr, lineW);
+        draw_phase_line_frame_gaps(ax, xs, ys, ph, fr, lineW, plotHalf);
     end
     if drawScatter
         scatX = [scatX; xs(:)];   %#ok<AGROW>
@@ -224,96 +226,14 @@ for j = 1:numel(lickX)
 end
 
 if drawScatter && ~isempty(scatX)
-    scatter(ax, scatX, scatY, markerSize, scatPh, 'filled', ...
-        'MarkerFaceAlpha', 0.7, 'MarkerEdgeColor', 'none');
+    [scatX, scatY, scatPh] = filterScatterToSquare(scatX, scatY, scatPh, plotHalf);
+    if ~isempty(scatX)
+        scatter(ax, scatX, scatY, markerSize, scatPh, 'filled', ...
+            'MarkerFaceAlpha', 0.7, 'MarkerEdgeColor', 'none');
+    end
 end
+drawJawRestMarker(ax);
 hold(ax, 'off');
-end
-
-
-function setupTileAxes(ax, axisMin, axisMax, cmapPhase)
-axis(ax, 'equal');
-axis(ax, 'square');
-set(ax, 'YDir', 'reverse');
-xlim(ax, [axisMin axisMax]);
-ylim(ax, [axisMin axisMax]);
-xticks(ax, [axisMin (axisMin + axisMax) / 2 axisMax]);
-yticks(ax, [axisMin (axisMin + axisMax) / 2 axisMax]);
-colormap(ax, cmapPhase);
-caxis(ax, [0 1]);
-end
-
-
-%% =======================================================================
-%% Trajectory extraction
-%% =======================================================================
-
-function draw_phase_line_frame_gaps(ax, x, y, ph, fr, lineW)
-% Break polylines where frame index skips (low-prob frames omitted).
-fr = fr(:)';
-if numel(fr) < 2
-    return
-end
-gapAfter = find(diff(fr) > 1);
-starts = [1, gapAfter + 1];
-ends = [gapAfter, numel(fr)];
-for k = 1:numel(starts)
-    i0 = starts(k);
-    i1 = ends(k);
-    if i1 > i0
-        draw_phase_line(ax, x(i0:i1), y(i0:i1), ph(i0:i1), lineW);
-    end
-end
-end
-
-
-function [lickX, lickY, lickPhase, lickFrame] = jawLickTrajectories(jawFile, intervals, probMin, minLickFrames)
-lickX = {};
-lickY = {};
-lickPhase = {};
-lickFrame = {};
-
-tbl = readJawCsv(jawFile);
-frm = tbl.Frame;
-xv = tbl.X;
-yv = tbl.Y;
-if isempty(probMin) || (~isscalar(probMin)) || probMin <= 0
-    keepProb = true(size(frm));
-else
-    keepProb = tbl.Probability >= probMin;
-end
-
-for i = 1:size(intervals, 1)
-    s = intervals(i, 1);
-    e = intervals(i, 2);
-    inLick = (frm >= s) & (frm <= e) & keepProb;
-    if ~any(inLick)
-        continue
-    end
-
-    fi = frm(inLick);
-    xi = xv(inLick);
-    yi = yv(inLick);
-    [~, ord] = sort(fi);
-    xs = xi(ord);
-    ys = yi(ord);
-    fs = fi(ord);
-    L = numel(xs);
-    if L < minLickFrames
-        continue
-    end
-
-    if L == 1
-        ph = 0.5;
-    else
-        ph = ((0:(L - 1))' / (L - 1));
-    end
-
-    lickX{end + 1} = xs;       %#ok<AGROW>
-    lickY{end + 1} = ys;       %#ok<AGROW>
-    lickPhase{end + 1} = ph;   %#ok<AGROW>
-    lickFrame{end + 1} = fs;   %#ok<AGROW>
-end
 end
 
 

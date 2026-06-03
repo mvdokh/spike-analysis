@@ -5,9 +5,13 @@ MATLAB scripts for **jaw-tip** trajectories during licks in **pixel coordinates*
 | Family | Data root | Lick definition |
 |--------|-----------|-----------------|
 | **IRt / PCRt BiPoles** (opto) | `C:\Users\wanglab\Desktop\Ina\IRt_BiPoles\`, `PCRt_BiPoles\` | Laser-ON; **first lick per laser pulse** (default) |
-| **IRt TeLC** (spontaneous) | `C:\Users\wanglab\Desktop\Ina\IRt_TeLC\` | Side-view Pre sessions; **stereotyped** licks from behavior CSV |
+| **IRt TeLC** (spontaneous) | `C:\Users\wanglab\Desktop\Ina\IRt_TeLC\IRt_TeLC08\` (etc.) | `IRt_TeLC##_Pre` / `Post`; side view `*_1_jaw.csv` in Pre |
 
 Jaw CSVs are space-delimited: `Frame`, `X`, `Y`, `Probability` (model confidence).
+
+**Plot coordinates:** trajectory scripts center on the session mean jaw `(X,Y)` (resting position, same idea as tongue plots centered on jaw mean). Axes are **100×100** pixels (`PLOT_HALF = 50`, range ±50). Polylines are **clipped** at the window edge; scatter points outside the window are omitted. A small **+** marks the origin (jaw rest).
+
+**Lick intervals:** jaw points are taken from `Start − LICK_FRAME_PAD` through `End + LICK_FRAME_PAD` (default **10** frames) to compensate for tongue-area–based behavior CSV timing. Shared helper: `extractJawLickTrajectories.m`.
 
 ---
 
@@ -18,13 +22,25 @@ jaw_heatmaps/
 ├── README.md
 ├── filter_lick_trajectories.m          ← shared jump / hotspot QC
 ├── draw_phase_line.m                   ← phase-colored polylines (+ optional gap break)
+├── telc_pre_side_jaw_paths.m           ← resolve Pre *_1_jaw.csv under IRt_TeLC##/
+├── jawSessionRestXY.m                  ← session mean jaw position (rest)
+├── centerLickCells.m                   ← subtract rest -> origin
+├── drawJawRestMarker.m                 ← small + at (0,0)
+├── extractJawLickTrajectories.m        ← lick intervals + frame pad
+├── readSpontaneousLickIntervals.m     ← all TeLC spontaneous licks from behavior CSV
+├── clipSegmentToSquare.m               ← clip line segments to plot window
+├── filterScatterToSquare.m             ← drop scatter outside window
+├── draw_phase_line_frame_gaps.m        ← phase line with frame-gap breaks
+├── setupCenteredJawAxes.m              ← 100x100 axes (+/-50 px)
 │
 ├── bipoles_jaw_tip_trajectory_by_session.m
 ├── bipoles_jaw_tip_trajectory_sideview_combined.m
 ├── bipoles_jaw_tip_trajectory_sideview_combined_prob080.m
+├── bipoles_jaw_tip_one_random_lick_per_animal.m
 │
 ├── telc_spontaneous_tip_trajectory_by_session.m
 ├── telc_spontaneous_tip_trajectory_by_session_prob080.m
+├── telc_spontaneous_one_random_lick_per_animal.m
 │
 ├── bipoles_jaw_tip_trajectories/           ← MAD / hotspot filter (default BiPoles)
 ├── bipoles_jaw_tip_trajectories_prob080/   ← prob >= 0.80 only
@@ -64,11 +80,13 @@ where \(d\) is the Euclidean step between consecutive frames in a lick. Optional
 
 ### `draw_phase_line.m`
 
-Phase-colored line via `surface(..., EdgeColor='interp')`. Optional `maxSegGap` breaks the polyline across large spatial gaps (BiPoles after point trimming). Prob080 scripts break on **frame gaps** \(> 1\) when low-probability frames are omitted.
+Phase-colored line (per-segment `plot` colors for reliable SVG export). Optional `maxSegGap` breaks the polyline across large spatial gaps (BiPoles after point trimming). Optional `clipHalf` clips each segment to `[-clipHalf, clipHalf]`. Prob080 scripts use `draw_phase_line_frame_gaps.m` to break on **frame gaps** \(> 1\) when low-probability frames are omitted.
 
 ---
 
 ## BiPoles (opto)
+
+Figure captions use **Jaw trajectory during laser-ON lick** (per-session, combined, and random-lick figures).
 
 ### `bipoles_jaw_tip_trajectory_by_session.m`
 
@@ -111,6 +129,16 @@ Copy of the combined script with **no** `filter_lick_trajectories`. Only jaw poi
 
 **Run:** `bipoles_jaw_tip_trajectory_sideview_combined_prob080`
 
+### `bipoles_jaw_tip_one_random_lick_per_animal.m`
+
+Side view only. **`N_RANDOM_LICKS` (default 5) random laser-ON licks per animal**, overlaid per panel (any session); pool = first lick per laser pulse across all side sessions. **Animals plotted:** IRt_01–03 and PCRt_02, 07, 08 only (IRt_09/10 and PCRt_09 excluded). Sampling is without replacement when enough licks exist. No trajectory or probability filter. Trajectories are **PCHIP-smoothed** (`SMOOTH_N_POINTS = 128`) and drawn as **lines only** (no scatter).
+
+Set `RANDOM_SEED = 42` in CONFIG for reproducible picks; `[]` for a new draw each run.
+
+**Output:** `bipoles_jaw_tip_trajectories/bipoles_jaw_tip_one_random_lick_per_animal_<IRt|PCRt>_BiPoles.svg`
+
+**Run:** `bipoles_jaw_tip_one_random_lick_per_animal`
+
 ---
 
 ## TeLC (spontaneous, Pre side view)
@@ -119,10 +147,10 @@ Copy of the combined script with **no** `filter_lick_trajectories`. Only jaw poi
 
 Three animals (TeLC08, 09, 11), `*_1_jaw.csv` only.
 
-1. **Stereotyped licks** from `*side_behavior*.csv` (per session):
-   - Duration within median \(\pm\) `DURATION_MAD_K` × scaled MAD (`3`)
-   - `Tongue_area_Interval Max` not far below median (`AREA_MAD_K = 3`)
+1. **All spontaneous licks** from `*side_behavior*.csv` interval Start/End columns (`readSpontaneousLickIntervals.m`).
 2. **Trajectory filter:** `filter_lick_trajectories`, mode `'lick'` (drop whole lick on any bad jump/singleton).
+
+Figure captions: **Jaw trajectory during spontaneous lick**.
 
 **Output:** `telc_spontaneous_tip_trajectories/<base>_spontaneous_jawtip_traj.svg`
 
@@ -130,11 +158,19 @@ Three animals (TeLC08, 09, 11), `*_1_jaw.csv` only.
 
 ### `telc_spontaneous_tip_trajectory_by_session_prob080.m`
 
-Same stereotyped lick selection; **no** jump filter. Jaw points require **`Probability >= 0.80`**.
+Same spontaneous lick selection; **no** jump filter. Jaw points require **`Probability >= 0.80`**. Caption: **Jaw trajectory during spontaneous lick**.
 
 **Output:** `telc_spontaneous_tip_trajectories_prob080/<base>_spontaneous_jawtip_traj_prob080.svg`
 
 **Run:** `telc_spontaneous_tip_trajectory_by_session_prob080`
+
+### `telc_spontaneous_one_random_lick_per_animal.m`
+
+Pre side view only. **`N_RANDOM_LICKS` (default 5) random spontaneous licks per animal** (TeLC08, 09, 11), overlaid per panel. Caption: **Jaw trajectory during spontaneous lick**. No trajectory or probability filter; PCHIP-smoothed phase-colored lines only (no scatter). One figure, three panels.
+
+**Output:** `telc_spontaneous_tip_trajectories/telc_spontaneous_one_random_lick_per_animal.svg`
+
+**Run:** `telc_spontaneous_one_random_lick_per_animal`
 
 ---
 
@@ -152,11 +188,25 @@ With `FIRST_LICK_PER_LASER = true`, only the row with the **minimum** `Interval 
 
 ---
 
+## TeLC folder layout
+
+```
+IRt_TeLC/
+├── IRt_TeLC08/
+│   ├── IRt_TeLC08_Pre/          ← jaw + behavior CSVs for Pre
+│   └── IRt_TeLC08_Post/
+│       └── IRt_TeLC08_post_2026_04_05/   ← one subfolder per post day
+├── IRt_TeLC09/
+└── IRt_TeLC11/
+```
+
+`telc_pre_side_jaw_paths()` finds `*_1_jaw.csv` in each `IRt_TeLC##_Pre` folder.
+
 ## Lick selection (TeLC)
 
 | Pattern | Jaw file |
 |---------|----------|
-| `*side_behavior*.csv` | `*_1_jaw.csv` (side) |
+| `*side_behavior*.csv` | `*_1_jaw.csv` (side), same folder as jaw CSV |
 
 Stereotyped filters use the same MAD band helpers as in the script (duration central band + area lower fence).
 

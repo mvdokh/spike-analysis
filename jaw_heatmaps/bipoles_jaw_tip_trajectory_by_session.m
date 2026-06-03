@@ -91,6 +91,7 @@ FIRST_LICK_PER_LASER = true;  % one trajectory per laser pulse (first lick only)
 
 PROB_MIN = 0;            % minimum keypoint probability (0 = no filter)
 MIN_LICK_FRAMES = 2;     % skip licks shorter than this many tracked frames
+LICK_FRAME_PAD = 10;     % extra frames before/after behavior lick Start/End
 TRAJECTORY_FILTER = true;        % remove outlier points (large jumps, singleton coords)
 TRAJECTORY_FILTER_MODE = 'points';  % 'points' = trim licks; 'lick' = drop whole lick
 TRAJECTORY_STEP_MAD_K = 5;       % step threshold = median + K * (1.4826 * MAD)
@@ -99,8 +100,7 @@ TRAJECTORY_HOTSPOT_MIN_COUNT = 20;   % session coord count: drop if any adj step
 TRAJECTORY_HOTSPOT_PURGE_COUNT = 50; % drop all points at coords this common in session
 TRAJECTORY_LINE_BREAK_MAX = 20;  % do not draw lines across gaps larger than this (px)
 TRAJECTORY_FILTER_SINGLETON = true;
-AXIS_MIN = 0;            % pixel-space axis bounds (full frame, not zoomed)
-AXIS_MAX = 256;
+PLOT_HALF = 50;            % 100x100 axes centered on jaw rest (+/-50 px)
 DRAW_SEGMENT_LINES = true;
 DRAW_SCATTER = true;
 LINE_WIDTH = 1.4;
@@ -158,7 +158,8 @@ for e = 1:numel(experiments)
             continue
         end
 
-        [lickX, lickY, lickPhase] = jawLickTrajectories(jawFile, intervals, PROB_MIN, MIN_LICK_FRAMES);
+        [lickX, lickY, lickPhase] = extractJawLickTrajectories(jawFile, intervals, PROB_MIN, ...
+            MIN_LICK_FRAMES, LICK_FRAME_PAD, false);
         if isempty(lickX)
             fprintf('  skip (no jaw points within laser-%s licks): %s\n', LASER_MODE, meta.base);
             nSkipped = nSkipped + 1;
@@ -180,12 +181,15 @@ for e = 1:numel(experiments)
             end
         end
 
+        [jx, jy] = jawSessionRestXY(jawFile, PROB_MIN);
+        [lickX, lickY] = centerLickCells(lickX, lickY, jx, jy);
+
         outName = sprintf('%s_laser%s_jawtip_traj.%s', meta.base, upper(LASER_MODE), OUTPUT_FMT);
         outPath = fullfile(outDir, outName);
 
         renderAndSave(outPath, lickX, lickY, lickPhase, meta, cmapPhase, ...
             DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE, ...
-            AXIS_MIN, AXIS_MAX, LASER_MODE, TRAJECTORY_LINE_BREAK_MAX);
+            PLOT_HALF, LASER_MODE, TRAJECTORY_LINE_BREAK_MAX);
 
         nWritten = nWritten + 1;
         fprintf('  saved (%d licks): %s\n', numel(lickX), outName);
@@ -202,14 +206,12 @@ end
 %% =======================================================================
 
 function renderAndSave(outPath, lickX, lickY, lickPhase, meta, cmapPhase, ...
-    drawLines, drawScatter, lineW, markerSize, axisMin, axisMax, laserMode, lineBreakMax)
+    drawLines, drawScatter, lineW, markerSize, plotHalf, laserMode, lineBreakMax)
 
 fig = figure('Visible', 'off', 'Color', 'w', 'Position', [80 80 620 560]);
 ax = axes(fig); %#ok<LAXES>
-set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
 hold(ax, 'on');
-colormap(ax, cmapPhase);
-caxis(ax, [0 1]);
+setupCenteredJawAxes(ax, plotHalf, cmapPhase);
 
 scatX = [];
 scatY = [];
@@ -223,7 +225,7 @@ for j = 1:numel(lickX)
         continue
     end
     if drawLines && numel(xs) > 1
-        draw_phase_line(ax, xs, ys, ph, lineW, lineBreakMax);
+        draw_phase_line(ax, xs, ys, ph, lineW, lineBreakMax, plotHalf);
     end
     if drawScatter
         scatX = [scatX; xs(:)];   %#ok<AGROW>
@@ -233,22 +235,19 @@ for j = 1:numel(lickX)
 end
 
 if drawScatter && ~isempty(scatX)
-    scatter(ax, scatX, scatY, markerSize, scatPh, 'filled', ...
-        'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none');
+    [scatX, scatY, scatPh] = filterScatterToSquare(scatX, scatY, scatPh, plotHalf);
+    if ~isempty(scatX)
+        scatter(ax, scatX, scatY, markerSize, scatPh, 'filled', ...
+            'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none');
+    end
 end
 
-axis(ax, 'equal');
-axis(ax, 'square');
-set(ax, 'YDir', 'reverse');
+drawJawRestMarker(ax);
+xlabel(ax, 'X relative to jaw rest (pixels)', 'Interpreter', 'none');
+ylabel(ax, 'Y relative to jaw rest (pixels)', 'Interpreter', 'none');
 
-xlim(ax, [axisMin axisMax]);
-ylim(ax, [axisMin axisMax]);
-xticks(ax, [axisMin (axisMin + axisMax) / 2 axisMax]);
-yticks(ax, [axisMin (axisMin + axisMax) / 2 axisMax]);
-xlabel(ax, 'X (pixels)', 'Interpreter', 'none');
-ylabel(ax, 'Y (pixels)', 'Interpreter', 'none');
-
-title(ax, {meta.base, sprintf('%d %s licks', numel(lickX), laserModeLabel(laserMode))}, ...
+title(ax, {meta.base, 'Jaw trajectory during laser-ON lick', ...
+    sprintf('%d licks', numel(lickX))}, ...
     'Interpreter', 'none', 'FontSize', 10, 'Color', 'k');
 
 cb = colorbar(ax);
@@ -275,53 +274,6 @@ switch lower(laserMode)
         lbl = 'laser-OFF';
     otherwise
         lbl = 'all';
-end
-end
-
-
-%% =======================================================================
-%% Trajectory extraction
-%% =======================================================================
-
-function [lickX, lickY, lickPhase] = jawLickTrajectories(jawFile, intervals, probMin, minLickFrames)
-lickX = {};
-lickY = {};
-lickPhase = {};
-
-tbl = readJawCsv(jawFile);
-frm = tbl.Frame;
-xv = tbl.X;
-yv = tbl.Y;
-if isempty(probMin) || (~isscalar(probMin)) || probMin <= 0
-    keepProb = true(size(frm));
-else
-    keepProb = tbl.Probability >= probMin;
-end
-
-for i = 1:size(intervals, 1)
-    s = intervals(i, 1);
-    e = intervals(i, 2);
-    inLick = (frm >= s) & (frm <= e) & keepProb;
-    if ~any(inLick)
-        continue
-    end
-
-    fi = frm(inLick);
-    xi = xv(inLick);
-    yi = yv(inLick);
-    [~, ord] = sort(fi);
-    xs = xi(ord);
-    ys = yi(ord);
-    L = numel(xs);
-    if L < minLickFrames
-        continue
-    end
-
-    ph = ((0:(L - 1))' / (L - 1));
-
-    lickX{end + 1} = xs;       %#ok<AGROW>
-    lickY{end + 1} = ys;       %#ok<AGROW>
-    lickPhase{end + 1} = ph;   %#ok<AGROW>
 end
 end
 
