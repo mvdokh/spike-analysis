@@ -4,8 +4,9 @@ function bipoles_jaw_tip_trajectory_by_session
 % (IRt_BiPoles and PCRt_BiPoles), plotted in image pixel coordinates and
 % colored by intra-lick phase (0 = lick start, 1 = lick end).
 %
-% By default only LASER-ON (opto-evoked) licks are plotted: behavior rows
-% whose laser overlap-assign ID is >= 0. One SVG is written per session per
+% By default only LASER-ON licks are plotted, and within each laser pulse
+% only the FIRST lick (earliest Interval Start per laser_Interval Overlap
+% Assign ID) is kept. One SVG is written per session per
 % view (bottom / side) into:
 %   jaw_heatmaps/bipoles_jaw_tip_trajectories/<experiment>/
 %
@@ -86,15 +87,24 @@ jawCsvPaths_PCRt = {
 %   'off' -> spontaneous licks (laser Assign ID  < 0)
 %   'all' -> every detected lick
 LASER_MODE = 'on';
+FIRST_LICK_PER_LASER = true;  % one trajectory per laser pulse (first lick only)
 
 PROB_MIN = 0;            % minimum keypoint probability (0 = no filter)
 MIN_LICK_FRAMES = 2;     % skip licks shorter than this many tracked frames
+TRAJECTORY_FILTER = true;        % remove outlier points (large jumps, singleton coords)
+TRAJECTORY_FILTER_MODE = 'points';  % 'points' = trim licks; 'lick' = drop whole lick
+TRAJECTORY_STEP_MAD_K = 5;       % step threshold = median + K * (1.4826 * MAD)
+TRAJECTORY_STEP_HARD_MAX = 20;   % also flag steps > this (px); catches inflated robust T
+TRAJECTORY_HOTSPOT_MIN_COUNT = 20;   % session coord count: drop if any adj step > T
+TRAJECTORY_HOTSPOT_PURGE_COUNT = 50; % drop all points at coords this common in session
+TRAJECTORY_LINE_BREAK_MAX = 20;  % do not draw lines across gaps larger than this (px)
+TRAJECTORY_FILTER_SINGLETON = true;
 AXIS_MIN = 0;            % pixel-space axis bounds (full frame, not zoomed)
 AXIS_MAX = 256;
 DRAW_SEGMENT_LINES = true;
 DRAW_SCATTER = true;
 LINE_WIDTH = 1.4;
-MARKER_SIZE = 16;
+MARKER_SIZE = 8;
 OUTPUT_FMT = 'svg';
 
 %% =======================================================================
@@ -141,7 +151,7 @@ for e = 1:numel(experiments)
             continue
         end
 
-        intervals = readLickIntervalsByLaser(behFile, LASER_MODE);
+        intervals = readLickIntervalsByLaser(behFile, LASER_MODE, FIRST_LICK_PER_LASER);
         if isempty(intervals)
             fprintf('  skip (no laser-%s licks): %s\n', LASER_MODE, meta.base);
             nSkipped = nSkipped + 1;
@@ -155,12 +165,27 @@ for e = 1:numel(experiments)
             continue
         end
 
+        if TRAJECTORY_FILTER
+            [lickX, lickY, lickPhase, fInfo] = filter_lick_trajectories(lickX, lickY, lickPhase, ...
+                MIN_LICK_FRAMES, TRAJECTORY_STEP_MAD_K, TRAJECTORY_FILTER_SINGLETON, ...
+                TRAJECTORY_FILTER_MODE, TRAJECTORY_STEP_HARD_MAX, ...
+                TRAJECTORY_HOTSPOT_MIN_COUNT, TRAJECTORY_HOTSPOT_PURGE_COUNT);
+            fprintf(['    trajectory filter (%s): %d licks, removed %d pts, ' ...
+                'dropped %d short licks, T=%.2f\n'], fInfo.filterMode, fInfo.nKept, ...
+                fInfo.nPtsRemoved, fInfo.nDropShort, fInfo.stepThreshold);
+            if isempty(lickX)
+                fprintf('  skip (no licks after trajectory filter): %s\n', meta.base);
+                nSkipped = nSkipped + 1;
+                continue
+            end
+        end
+
         outName = sprintf('%s_laser%s_jawtip_traj.%s', meta.base, upper(LASER_MODE), OUTPUT_FMT);
         outPath = fullfile(outDir, outName);
 
         renderAndSave(outPath, lickX, lickY, lickPhase, meta, cmapPhase, ...
             DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE, ...
-            AXIS_MIN, AXIS_MAX, LASER_MODE);
+            AXIS_MIN, AXIS_MAX, LASER_MODE, TRAJECTORY_LINE_BREAK_MAX);
 
         nWritten = nWritten + 1;
         fprintf('  saved (%d licks): %s\n', numel(lickX), outName);
@@ -177,7 +202,7 @@ end
 %% =======================================================================
 
 function renderAndSave(outPath, lickX, lickY, lickPhase, meta, cmapPhase, ...
-    drawLines, drawScatter, lineW, markerSize, axisMin, axisMax, laserMode)
+    drawLines, drawScatter, lineW, markerSize, axisMin, axisMax, laserMode, lineBreakMax)
 
 fig = figure('Visible', 'off', 'Color', 'w', 'Position', [80 80 620 560]);
 ax = axes(fig); %#ok<LAXES>
@@ -198,7 +223,7 @@ for j = 1:numel(lickX)
         continue
     end
     if drawLines && numel(xs) > 1
-        drawPhaseLine(ax, xs, ys, ph, lineW);
+        draw_phase_line(ax, xs, ys, ph, lineW, lineBreakMax);
     end
     if drawScatter
         scatX = [scatX; xs(:)];   %#ok<AGROW>
@@ -239,18 +264,6 @@ catch %#ok<CTCH>
     print(fig, outPath, '-dsvg', '-painters');
 end
 close(fig);
-end
-
-
-function drawPhaseLine(ax, x, y, ph, lineW)
-% Draw a single phase-colored polyline using the surface/EdgeColor='interp'
-% idiom (one graphics object per lick, mapped through the axes colormap).
-x = x(:)';
-y = y(:)';
-ph = ph(:)';
-surface(ax, [x; x], [y; y], zeros(2, numel(x)), [ph; ph], ...
-    'FaceColor', 'none', 'EdgeColor', 'interp', 'LineWidth', lineW, ...
-    'HandleVisibility', 'off');
 end
 
 
@@ -313,11 +326,13 @@ end
 end
 
 
-function intervals = readLickIntervalsByLaser(behFile, laserMode)
+function intervals = readLickIntervalsByLaser(behFile, laserMode, firstPerLaser)
 % Read lick intervals from a BiPoles behavior CSV, filtered by laser state.
-% Columns (VariableNamingRule = preserve):
-%   Tongue_area_interval_detection_Interval Start / End  -> lick interval
-%   laser_Interval Overlap Assign ID                     -> -1 if no laser
+% When firstPerLaser is true and laserMode is 'on', keep only the first lick
+% (minimum Interval Start) for each laser_Interval Overlap Assign ID >= 0.
+if nargin < 3
+    firstPerLaser = true;
+end
 
 T = readtable(behFile, 'VariableNamingRule', 'preserve');
 v = T.Properties.VariableNames;
@@ -361,7 +376,23 @@ switch lower(laserMode)
 end
 
 sel = valid & keepLaser;
-intervals = [starts(sel), ends(sel)];
+s = starts(sel);
+e = ends(sel);
+if firstPerLaser && strcmpi(laserMode, 'on') && ~isempty(laserCol)
+    lidSel = double(T{sel, laserCol});
+    s = s(:);
+    e = e(:);
+    lidSel = lidSel(:);
+    keepRow = false(numel(s), 1);
+    for u = unique(lidSel(lidSel >= 0))'
+        idx = find(lidSel == u);
+        [~, im] = min(s(idx));
+        keepRow(idx(im)) = true;
+    end
+    s = s(keepRow);
+    e = e(keepRow);
+end
+intervals = [s(:), e(:)];
 end
 
 

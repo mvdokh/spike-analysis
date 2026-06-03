@@ -1,19 +1,10 @@
-function bipoles_jaw_tip_trajectory_sideview_combined
-% bipoles_jaw_tip_trajectory_sideview_combined
-% Combined SIDE-VIEW intra-lick jaw-tip trajectories for the opto-activation
-% experiments, laid out as a grid: one row per animal, one column per
-% session. Trajectories are in image pixel coordinates, colored by intra-lick
-% phase. Only laser-ON licks are shown, and within each laser pulse only the
-% FIRST lick (earliest Interval Start per laser assign ID) is plotted.
-% Two figures are produced: one for IRt_BiPoles and one for PCRt_BiPoles.
+function bipoles_jaw_tip_trajectory_sideview_combined_prob080
+% bipoles_jaw_tip_trajectory_sideview_combined_prob080
+% Same layout as bipoles_jaw_tip_trajectory_sideview_combined, but quality
+% control uses only the jaw CSV Probability column (model confidence).
+% Frames with Probability < PROB_MIN are excluded; no jump/hotspot filter.
 %
-% Outlier rejection: the distribution of step distances between consecutive
-% tracked points is examined per experiment. If it is heavy-tailed (a few
-% "super-high" jumps exist, detected with a robust MAD threshold), the
-% offending spike points are removed before plotting. Tight distributions
-% (no wide tail) are left untouched.
-%
-% Run: bipoles_jaw_tip_trajectory_sideview_combined
+% Run: bipoles_jaw_tip_trajectory_sideview_combined_prob080
 
 close all
 
@@ -54,11 +45,8 @@ jawCsvPaths_PCRt = {
 
 LASER_MODE = 'on';       % 'on' | 'off' | 'all'  (see readLickIntervalsByLaser)
 FIRST_LICK_PER_LASER = true;  % one trajectory per laser pulse (first lick only)
-PROB_MIN = 0;            % minimum keypoint probability (0 = no filter)
-MIN_LICK_FRAMES = 2;     % skip licks shorter than this many tracked frames
-TRAJECTORY_FILTER = true;        % remove outlier points (large jumps, singleton coords)
-TRAJECTORY_FILTER_MODE = 'points';
-TRAJECTORY_FILTER_SINGLETON = true;
+PROB_MIN = 0.80;         % minimum jaw-tip Probability (model confidence)
+MIN_LICK_FRAMES = 2;     % skip licks shorter than this many high-prob frames
 AXIS_MIN = 0;            % pixel-space axis bounds (full frame, not zoomed)
 AXIS_MAX = 256;
 DRAW_SEGMENT_LINES = true;
@@ -66,16 +54,10 @@ DRAW_SCATTER = true;
 LINE_WIDTH = 1.0;
 MARKER_SIZE = 4;
 
-TRAJECTORY_STEP_MAD_K = 5;
-TRAJECTORY_STEP_HARD_MAX = 20;
-TRAJECTORY_HOTSPOT_MIN_COUNT = 20;
-TRAJECTORY_HOTSPOT_PURGE_COUNT = 50;
-TRAJECTORY_LINE_BREAK_MAX = 20;
-
 %% =======================================================================
 
 thisDir = fileparts(mfilename('fullpath'));
-outRoot = fullfile(thisDir, 'bipoles_jaw_tip_trajectories');
+outRoot = fullfile(thisDir, 'bipoles_jaw_tip_trajectories_prob080');
 if ~exist(outRoot, 'dir')
     mkdir(outRoot);
 end
@@ -94,7 +76,7 @@ for e = 1:numel(experiments)
 
     %% Collect one cell per (animal, session) side-view file
     cells = struct('animal', {}, 'dateKey', {}, 'dateLabel', {}, ...
-        'base', {}, 'lickX', {}, 'lickY', {}, 'lickPhase', {});
+        'base', {}, 'lickX', {}, 'lickY', {}, 'lickPhase', {}, 'lickFrame', {});
 
     for k = 1:numel(paths)
         jawFile = paths{k};
@@ -118,26 +100,12 @@ for e = 1:numel(experiments)
             continue
         end
 
-        [sx, sy, sp] = jawLickTrajectories(jawFile, intervals, PROB_MIN, MIN_LICK_FRAMES);
+        [sx, sy, sp, sf] = jawLickTrajectories(jawFile, intervals, PROB_MIN, MIN_LICK_FRAMES);
         if isempty(sx)
             continue
         end
-
-        if TRAJECTORY_FILTER
-            [sx, sy, sp, fInfo] = filter_lick_trajectories(sx, sy, sp, MIN_LICK_FRAMES, ...
-                TRAJECTORY_STEP_MAD_K, TRAJECTORY_FILTER_SINGLETON, TRAJECTORY_FILTER_MODE, ...
-                TRAJECTORY_STEP_HARD_MAX, TRAJECTORY_HOTSPOT_MIN_COUNT, ...
-                TRAJECTORY_HOTSPOT_PURGE_COUNT);
-            if isempty(sx)
-                fprintf('  skip (no licks after trajectory filter): %s\n', meta.base);
-                continue
-            end
-            fprintf('  + %s : %d laser-%s licks (filter: -%d pts, -%d short, T=%.1f)\n', ...
-                meta.base, numel(sx), LASER_MODE, fInfo.nPtsRemoved, fInfo.nDropShort, ...
-                fInfo.stepThreshold);
-        else
-            fprintf('  + %s : %d laser-%s licks\n', meta.base, numel(sx), LASER_MODE);
-        end
+        fprintf('  + %s : %d laser-%s licks (prob >= %.2f)\n', ...
+            meta.base, numel(sx), LASER_MODE, PROB_MIN);
 
         ci = numel(cells) + 1;
         cells(ci).animal = meta.animal;
@@ -147,6 +115,7 @@ for e = 1:numel(experiments)
         cells(ci).lickX = sx;
         cells(ci).lickY = sy;
         cells(ci).lickPhase = sp;
+        cells(ci).lickFrame = sf;
     end
 
     if isempty(cells)
@@ -174,8 +143,8 @@ for e = 1:numel(experiments)
     fig = figure('Visible', 'off', 'Color', 'w', 'Position', [60 60 figW figH]);
     tl = tiledlayout(fig, nRows, nCols, 'Padding', 'compact', 'TileSpacing', 'compact');
     colormap(fig, cmapPhase);
-    title(tl, sprintf('%s  —  side-view jaw-tip trajectories (laser-%s)   [rows = animal, cols = session]', ...
-        expTag, upper(LASER_MODE)), ...
+    title(tl, sprintf('%s  —  side view, prob >= %.2f (laser-%s)   [rows = animal, cols = session]', ...
+        expTag, PROB_MIN, upper(LASER_MODE)), ...
         'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 13, 'Color', 'k');
 
     for r = 1:nRows
@@ -188,9 +157,8 @@ for e = 1:numel(experiments)
             end
             cc = cells(idxs(c));
 
-            drawTile(ax, cc.lickX, cc.lickY, cc.lickPhase, cmapPhase, ...
-                DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE, ...
-                TRAJECTORY_LINE_BREAK_MAX);
+            drawTile(ax, cc.lickX, cc.lickY, cc.lickPhase, cc.lickFrame, cmapPhase, ...
+                DRAW_SEGMENT_LINES, DRAW_SCATTER, LINE_WIDTH, MARKER_SIZE);
             setupTileAxes(ax, AXIS_MIN, AXIS_MAX, cmapPhase);
 
             if c == 1
@@ -208,7 +176,7 @@ for e = 1:numel(experiments)
     cb.Label.String = 'Intra-lick phase (0=start, 1=end)';
     cb.Label.Interpreter = 'none';
 
-    outName = sprintf('bipoles_jaw_tip_trajectory_sideview_combined_%s.svg', expTag);
+    outName = sprintf('bipoles_jaw_tip_trajectory_sideview_combined_prob080_%s.svg', expTag);
     outPath = fullfile(outRoot, outName);
     try
         exportgraphics(fig, outPath, 'ContentType', 'vector');
@@ -227,7 +195,7 @@ end
 %% Rendering
 %% =======================================================================
 
-function drawTile(ax, lickX, lickY, lickPhase, cmapPhase, drawLines, drawScatter, lineW, markerSize, lineBreakMax)
+function drawTile(ax, lickX, lickY, lickPhase, lickFrame, cmapPhase, drawLines, drawScatter, lineW, markerSize)
 set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
 hold(ax, 'on');
 colormap(ax, cmapPhase);
@@ -241,11 +209,12 @@ for j = 1:numel(lickX)
     xs = lickX{j};
     ys = lickY{j};
     ph = lickPhase{j};
+    fr = lickFrame{j};
     if isempty(xs)
         continue
     end
     if drawLines && numel(xs) > 1
-        draw_phase_line(ax, xs, ys, ph, lineW, lineBreakMax);
+        draw_phase_line_frame_gaps(ax, xs, ys, ph, fr, lineW);
     end
     if drawScatter
         scatX = [scatX; xs(:)];   %#ok<AGROW>
@@ -279,10 +248,30 @@ end
 %% Trajectory extraction
 %% =======================================================================
 
-function [lickX, lickY, lickPhase] = jawLickTrajectories(jawFile, intervals, probMin, minLickFrames)
+function draw_phase_line_frame_gaps(ax, x, y, ph, fr, lineW)
+% Break polylines where frame index skips (low-prob frames omitted).
+fr = fr(:)';
+if numel(fr) < 2
+    return
+end
+gapAfter = find(diff(fr) > 1);
+starts = [1, gapAfter + 1];
+ends = [gapAfter, numel(fr)];
+for k = 1:numel(starts)
+    i0 = starts(k);
+    i1 = ends(k);
+    if i1 > i0
+        draw_phase_line(ax, x(i0:i1), y(i0:i1), ph(i0:i1), lineW);
+    end
+end
+end
+
+
+function [lickX, lickY, lickPhase, lickFrame] = jawLickTrajectories(jawFile, intervals, probMin, minLickFrames)
 lickX = {};
 lickY = {};
 lickPhase = {};
+lickFrame = {};
 
 tbl = readJawCsv(jawFile);
 frm = tbl.Frame;
@@ -308,16 +297,22 @@ for i = 1:size(intervals, 1)
     [~, ord] = sort(fi);
     xs = xi(ord);
     ys = yi(ord);
+    fs = fi(ord);
     L = numel(xs);
     if L < minLickFrames
         continue
     end
 
-    ph = ((0:(L - 1))' / (L - 1));
+    if L == 1
+        ph = 0.5;
+    else
+        ph = ((0:(L - 1))' / (L - 1));
+    end
 
     lickX{end + 1} = xs;       %#ok<AGROW>
     lickY{end + 1} = ys;       %#ok<AGROW>
     lickPhase{end + 1} = ph;   %#ok<AGROW>
+    lickFrame{end + 1} = fs;   %#ok<AGROW>
 end
 end
 
