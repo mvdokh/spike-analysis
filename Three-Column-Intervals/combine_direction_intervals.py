@@ -6,9 +6,9 @@ import pandas as pd
 
 
 # Edit these paths in one place before running the script.
-INPUT_FOLDER = Path(r"H:\.shortcut-targets-by-id\17tfqA28bUKBm67DoeFcz3RtG8jqNNu4B\NTNG1-PrV-Piezo\P005\102625_1\contact\0")
-PROTRACTION_CSV = INPUT_FOLDER / "0_protraction.csv"
-RETRACTION_CSV = INPUT_FOLDER / "0_retraction.csv"
+INPUT_FOLDER = Path(r"H:\.shortcut-targets-by-id\17tfqA28bUKBm67DoeFcz3RtG8jqNNu4B\NTNG1-PrV-Piezo\P003\052725_1\contact\4")
+PROTRACTION_CSV = INPUT_FOLDER / "4_protraction.csv"
+RETRACTION_CSV = INPUT_FOLDER / "4_retraction.csv"
 OUTPUT_CSV = INPUT_FOLDER / "direction.csv"
 
 OUTPUT_COLUMNS = ["Contact Start", "Contact End", "Direction"]
@@ -32,9 +32,14 @@ def load_intervals(csv_path: Path, direction: str) -> pd.DataFrame:
 
 def combine_interval_files(protraction_csv: Path, retraction_csv: Path, output_csv: Path) -> Path:
     protraction_df = load_intervals(protraction_csv, "Protraction")
-    retraction_df = load_intervals(retraction_csv, "Retraction")
+    frames = [protraction_df]
 
-    combined = pd.concat([protraction_df, retraction_df], ignore_index=True)
+    if retraction_csv.exists():
+        frames.append(load_intervals(retraction_csv, "Retraction"))
+    else:
+        print(f"No retraction CSV found at {retraction_csv}; writing protraction rows only.")
+
+    combined = pd.concat(frames, ignore_index=True)
     combined = combined.sort_values(["Contact Start", "Contact End", "Direction"], kind="stable")
     combined = combined.loc[:, OUTPUT_COLUMNS]
 
