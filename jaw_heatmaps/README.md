@@ -27,7 +27,8 @@ jaw_heatmaps/
 ├── centerLickCells.m                   ← subtract rest -> origin
 ├── drawJawRestMarker.m                 ← small + at (0,0)
 ├── extractJawLickTrajectories.m        ← lick intervals + frame pad
-├── readSpontaneousLickIntervals.m     ← all TeLC spontaneous licks from behavior CSV
+├── readFirstLickPerBoutIntervals.m    ← TeLC: first lick per bout (group Assign ID)
+├── readSpontaneousLickIntervals.m     ← all TeLC licks (unused by default scripts)
 ├── clipSegmentToSquare.m               ← clip line segments to plot window
 ├── filterScatterToSquare.m             ← drop scatter outside window
 ├── draw_phase_line_frame_gaps.m        ← phase line with frame-gap breaks
@@ -131,9 +132,11 @@ Copy of the combined script with **no** `filter_lick_trajectories`. Only jaw poi
 
 ### `bipoles_jaw_tip_one_random_lick_per_animal.m`
 
-Side view only. **`N_RANDOM_LICKS` (default 5) random laser-ON licks per animal**, overlaid per panel (any session); pool = first lick per laser pulse across all side sessions. **Animals plotted:** IRt_01–03 and PCRt_02, 07, 08 only (IRt_09/10 and PCRt_09 excluded). Sampling is without replacement when enough licks exist. No trajectory or probability filter. Trajectories are **PCHIP-smoothed** (`SMOOTH_N_POINTS = 128`) and drawn as **lines only** (no scatter).
+Side view only. **`N_SIMILAR_LICKS` (default 5) most shape-similar laser-ON licks per animal** from the pool of **first lick per laser interval** (`selectMostSimilarLickIndices.m`). Overlaid per panel from all side sessions. **Animals plotted:** IRt_01–03 and PCRt_02, 07, 08 only. No trajectory or probability filter. **PCHIP + movavg** display smoothing (`SMOOTH_N_POINTS = 256`, `SMOOTH_MOVAVG_WIN = 7`); lines only (no scatter).
 
-Set `RANDOM_SEED = 42` in CONFIG for reproducible picks; `[]` for a new draw each run.
+Per-animal panel stats: **path length (arc)** and **max distance from start** (mean ± SD over selected licks). See [`README_random_lick_figures.md`](README_random_lick_figures.md).
+
+**Full pipeline (±10 frames, centering, metrics):** see [`README_random_lick_figures.md`](README_random_lick_figures.md).
 
 **Output:** `bipoles_jaw_tip_trajectories/bipoles_jaw_tip_one_random_lick_per_animal_<IRt|PCRt>_BiPoles.svg`
 
@@ -147,7 +150,7 @@ Set `RANDOM_SEED = 42` in CONFIG for reproducible picks; `[]` for a new draw eac
 
 Three animals (TeLC08, 09, 11), `*_1_jaw.csv` only.
 
-1. **All spontaneous licks** from `*side_behavior*.csv` interval Start/End columns (`readSpontaneousLickIntervals.m`).
+1. **First lick per bout** from `*side_behavior*.csv` (`readFirstLickPerBoutIntervals.m`, column `...group_intervals_Interval Overlap Assign ID`).
 2. **Trajectory filter:** `filter_lick_trajectories`, mode `'lick'` (drop whole lick on any bad jump/singleton).
 
 Figure captions: **Jaw trajectory during spontaneous lick**.
@@ -166,7 +169,9 @@ Same spontaneous lick selection; **no** jump filter. Jaw points require **`Proba
 
 ### `telc_spontaneous_one_random_lick_per_animal.m`
 
-Pre side view only. **`N_RANDOM_LICKS` (default 5) random spontaneous licks per animal** (TeLC08, 09, 11), overlaid per panel. Caption: **Jaw trajectory during spontaneous lick**. No trajectory or probability filter; PCHIP-smoothed phase-colored lines only (no scatter). One figure, three panels.
+Pre side view only. **`N_SIMILAR_LICKS` (default 5) most shape-similar first-in-bout spontaneous licks per animal** (TeLC08, 09, 11). PCHIP + movavg smoothing; phase-colored lines only. One figure, three panels. Details: [`README_random_lick_figures.md`](README_random_lick_figures.md).
+
+**Full pipeline:** [`README_random_lick_figures.md`](README_random_lick_figures.md).
 
 **Output:** `telc_spontaneous_tip_trajectories/telc_spontaneous_one_random_lick_per_animal.svg`
 

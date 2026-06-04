@@ -65,8 +65,9 @@ for k = 1:numel(jawCsvPaths)
         continue
     end
 
-    [intervals, filtInfo] = readSpontaneousLickIntervals(behFile);
-    fprintf('  %s: %d spontaneous licks from behavior CSV\n', meta.base, filtInfo.nKept);
+    [intervals, filtInfo] = readFirstLickPerBoutIntervals(behFile);
+    fprintf('  %s: %d first-in-bout licks (%d total licks, %d bouts)\n', ...
+        meta.base, filtInfo.nKept, filtInfo.nTotal, filtInfo.nBouts);
 
     if isempty(intervals)
         fprintf('  skip (no spontaneous licks): %s\n', meta.base);
@@ -158,7 +159,7 @@ xlabel(ax, 'X relative to jaw rest (pixels)', 'Interpreter', 'none');
 ylabel(ax, 'Y relative to jaw rest (pixels)', 'Interpreter', 'none');
 
 title(ax, {meta.base, 'Jaw trajectory during spontaneous lick', ...
-    sprintf('%d licks', numel(lickX))}, ...
+    sprintf('%d first-in-bout licks', numel(lickX))}, ...
     'Interpreter', 'none', 'FontSize', 10, 'Color', 'k');
 
 cb = colorbar(ax);

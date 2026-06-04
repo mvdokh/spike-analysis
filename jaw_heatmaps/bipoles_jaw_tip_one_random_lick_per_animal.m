@@ -1,8 +1,8 @@
 function bipoles_jaw_tip_one_random_lick_per_animal
 % bipoles_jaw_tip_one_random_lick_per_animal
-% Side-view BiPoles: N_RANDOM_LICKS randomly chosen laser-ON licks per animal.
-% No trajectory or probability filtering. Trajectories are smoothed (PCHIP
-% resampling) and drawn as a single phase-colored line (no scatter).
+% Side-view BiPoles: N_SIMILAR_LICKS laser-ON licks per animal with the most
+% similar jaw-tip shape (from first lick per laser interval). PCHIP + moving-
+% average smoothing; phase-colored lines only (no scatter).
 %
 % Run: bipoles_jaw_tip_one_random_lick_per_animal
 
@@ -35,14 +35,15 @@ jawCsvPaths_PCRt = {
     };
 
 LASER_MODE = 'on';
-FIRST_LICK_PER_LASER = true;   % pool = first lick per laser pulse per session
+FIRST_LICK_PER_LASER = true;   % required: pool = first lick per laser interval only
 PROB_MIN = 0;                  % no probability filter
 MIN_LICK_FRAMES = 2;
 LICK_FRAME_PAD = 10;           % extra frames before/after behavior lick Start/End
-RANDOM_SEED = [];              % set e.g. 42 for reproducible picks; [] = new draw each run
-N_RANDOM_LICKS = 5;            % random licks drawn per animal (without replacement)
+N_SIMILAR_LICKS = 5;           % per animal: top N by shape similarity (greedy medoid)
+SIMILARITY_N_POINTS = 64;      % resample count for shape-distance matrix
 
-SMOOTH_N_POINTS = 128;         % resampled points along smoothed curve
+SMOOTH_N_POINTS = 256;         % display resample (PCHIP)
+SMOOTH_MOVAVG_WIN = 7;         % extra moving-average pass on display curve (odd)
 PLOT_HALF = 50;                % 100x100 axes centered on jaw rest (+/-50 px)
 LINE_WIDTH = 2.0;
 SAVE_SVG = true;
@@ -55,10 +56,6 @@ if ~exist(outRoot, 'dir')
     mkdir(outRoot);
 end
 
-if ~isempty(RANDOM_SEED)
-    rng(RANDOM_SEED);
-end
-
 experiments = struct( ...
     'tag',   {'IRt_BiPoles', 'PCRt_BiPoles'}, ...
     'paths', {jawCsvPaths_IRt, jawCsvPaths_PCRt});
@@ -69,10 +66,11 @@ for e = 1:numel(experiments)
     expTag = experiments(e).tag;
     paths = experiments(e).paths;
 
-    fprintf('\n=== %s : %d random licks per animal ===\n', expTag, N_RANDOM_LICKS);
+    fprintf('\n=== %s : %d most similar first-in-laser-interval licks per animal ===\n', ...
+        expTag, N_SIMILAR_LICKS);
 
-    picks = collectRandomLickPerAnimal(paths, LASER_MODE, FIRST_LICK_PER_LASER, ...
-        PROB_MIN, MIN_LICK_FRAMES, LICK_FRAME_PAD, N_RANDOM_LICKS);
+    picks = collectSimilarLickPerAnimal(paths, LASER_MODE, true, ...
+        PROB_MIN, MIN_LICK_FRAMES, LICK_FRAME_PAD, N_SIMILAR_LICKS, SIMILARITY_N_POINTS);
 
     if isempty(picks)
         warning('No licks found for %s.', expTag);
@@ -88,8 +86,8 @@ for e = 1:numel(experiments)
     fig = figure('Visible', 'off', 'Color', 'w', 'Position', [60 60 figW figH]);
     tl = tiledlayout(fig, nRow, nCol, 'Padding', 'compact', 'TileSpacing', 'compact');
     colormap(fig, cmapPhase);
-    title(tl, sprintf('%s — jaw trajectory during laser-ON lick (%d random licks per animal, smoothed)', ...
-        expTag, N_RANDOM_LICKS), ...
+    title(tl, sprintf('%s — jaw trajectory during laser-ON lick (%d most similar first-in-interval licks)', ...
+        expTag, N_SIMILAR_LICKS), ...
         'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 13, 'Color', 'k');
 
     for i = 1:nAnimals
@@ -98,19 +96,32 @@ for e = 1:numel(experiments)
         hold(ax, 'on');
 
         nLicks = numel(picks(i).licks);
+        pathLens = zeros(nLicks, 1);
+        maxExc = zeros(nLicks, 1);
         for L = 1:nLicks
             xs = picks(i).licks(L).x;
             ys = picks(i).licks(L).y;
-            [xsS, ysS, phS] = smoothLickTrajectory(xs, ys, SMOOTH_N_POINTS);
+            [xsS, ysS, phS] = smoothLickTrajectory(xs, ys, SMOOTH_N_POINTS, SMOOTH_MOVAVG_WIN);
+            pathLens(L) = trajectoryPathLength(xsS, ysS);
+            maxExc(L) = trajectoryMaxExcursionFromStart(xsS, ysS);
             draw_phase_line(ax, xsS, ysS, phS, LINE_WIDTH, [], PLOT_HALF);
-            fprintf('  %s [%d/%d] : %s (%d raw frames -> %d smooth)\n', ...
+            fprintf('  %s [%d/%d] : %s (%d frames, arc %.1f px, max-from-start %.1f px)\n', ...
                 picks(i).animal, L, nLicks, picks(i).licks(L).sessionBase, ...
-                numel(xs), SMOOTH_N_POINTS);
+                numel(xs), pathLens(L), maxExc(L));
         end
         drawJawRestMarker(ax);
+        annotatePathLengthStats(ax, pathLens, maxExc);
+        if nLicks > 1
+            fprintf(['  %s arc length: %.1f +/- %.1f px; max distance from start: ' ...
+                '%.1f +/- %.1f px (n=%d)\n'], picks(i).animal, mean(pathLens), ...
+                std(pathLens, 0), mean(maxExc), std(maxExc, 0), nLicks);
+        else
+            fprintf('  %s arc length: %.1f px; max distance from start: %.1f px\n', ...
+                picks(i).animal, pathLens(1), maxExc(1));
+        end
 
         title(ax, {picks(i).animal, 'Jaw trajectory during laser-ON lick', ...
-            sprintf('%d random licks', nLicks)}, ...
+            sprintf('%d most similar first-in-interval licks', nLicks)}, ...
             'Interpreter', 'none', 'FontSize', 9, 'Color', 'k');
         if mod(i, nCol) == 1
             ylabel(ax, picks(i).animal, 'FontWeight', 'bold', 'FontSize', 10, ...
@@ -143,14 +154,17 @@ end
 
 
 %% =======================================================================
-%% Random selection
+%% Similar-shape selection
 %% =======================================================================
 
-function picks = collectRandomLickPerAnimal(paths, laserMode, firstPerLaser, probMin, minLickFrames, framePad, nLicks)
-% Pool all laser-ON licks (per session) by animal; draw nLicks at random each.
+function picks = collectSimilarLickPerAnimal(paths, laserMode, firstPerLaser, probMin, minLickFrames, framePad, nLicks, nResample)
+% Pool first laser-interval licks (per session) by animal; keep nLicks most similar.
 
 if nargin < 7 || isempty(nLicks)
     nLicks = 5;
+end
+if nargin < 8 || isempty(nResample)
+    nResample = 64;
 end
 nLicks = max(1, round(nLicks));
 
@@ -199,34 +213,11 @@ picks = repmat(struct('animal', '', 'licks', []), numel(animals), 1);
 for a = 1:numel(animals)
     tag = animals{a};
     idx = find(strcmp({pool.animal}, tag));
-    nPick = min(nLicks, numel(idx));
-    pickIdx = idx(randperm(numel(idx), nPick));
+    sub = pool(idx);
+    localPick = selectMostSimilarLickIndices({sub.x}, {sub.y}, nLicks, nResample);
     picks(a).animal = tag;
-    picks(a).licks = pool(pickIdx);
+    picks(a).licks = sub(localPick);
 end
-end
-
-
-function [xOut, yOut, phOut] = smoothLickTrajectory(x, y, nOut)
-% PCHIP interpolation along intra-lick phase (uniform in time order).
-x = x(:);
-y = y(:);
-n = numel(x);
-if n < 2
-    xOut = x;
-    yOut = y;
-    phOut = 0.5 * ones(size(x));
-    return
-end
-if nargin < 3 || isempty(nOut) || nOut < n
-    nOut = max(n, 64);
-end
-
-t = linspace(0, 1, n)';
-tq = linspace(0, 1, nOut)';
-xOut = interp1(t, x, tq, 'pchip');
-yOut = interp1(t, y, tq, 'pchip');
-phOut = tq;
 end
 
 
