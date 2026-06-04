@@ -42,6 +42,7 @@ jaw_heatmaps/
 ├── telc_spontaneous_tip_trajectory_by_session.m
 ├── telc_spontaneous_tip_trajectory_by_session_prob080.m
 ├── telc_spontaneous_one_random_lick_per_animal.m
+├── telc_spontaneous_random20_similar_lick_per_animal.m
 │
 ├── bipoles_jaw_tip_trajectories/           ← MAD / hotspot filter (default BiPoles)
 ├── bipoles_jaw_tip_trajectories_prob080/   ← prob >= 0.80 only
@@ -176,6 +177,14 @@ Pre side view only. **`N_SIMILAR_LICKS` (default 5) most shape-similar first-in-
 **Output:** `telc_spontaneous_tip_trajectories/telc_spontaneous_one_random_lick_per_animal.svg`
 
 **Run:** `telc_spontaneous_one_random_lick_per_animal`
+
+### `telc_spontaneous_random20_similar_lick_per_animal.m`
+
+Same as above, but per animal: **randomly sample 20** first-in-bout licks from the full session pool (~300 bouts), then plot the **5 most shape-similar** within that subset (`N_RANDOM_POOL = 20`, `N_SIMILAR_LICKS = 5`). `RANDOM_SEED = []` shuffles each run.
+
+**Output:** `telc_spontaneous_tip_trajectories/telc_spontaneous_random20_similar_lick_per_animal.svg`
+
+**Run:** `telc_spontaneous_random20_similar_lick_per_animal`
 
 ---
 
