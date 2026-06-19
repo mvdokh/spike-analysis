@@ -1,15 +1,21 @@
+import csv
 import os
+
 import cv2
 
-VIDEO_EXTENSIONS = ['.mp4']
+ROOT_DIR = r"C:\Users\wanglab\Desktop\Ina\PCRt_TeLC"
+OUTPUT_CSV = os.path.join(ROOT_DIR, "video_frame_counts.csv")
+VIDEO_EXTENSIONS = (".mp4",)
+
 
 def find_videos(root_dir):
-    video_files = []
+    videos = []
     for dirpath, _, filenames in os.walk(root_dir):
         for filename in filenames:
-            if any(filename.lower().endswith(ext) for ext in VIDEO_EXTENSIONS):
-                video_files.append(os.path.join(dirpath, filename))
-    return video_files
+            if filename.lower().endswith(VIDEO_EXTENSIONS):
+                videos.append(os.path.join(dirpath, filename))
+    return sorted(videos)
+
 
 def count_frames(video_path):
     cap = cv2.VideoCapture(video_path)
@@ -19,45 +25,41 @@ def count_frames(video_path):
     cap.release()
     return frame_count
 
+
+def get_pre_post(video_path):
+    parent = os.path.basename(os.path.dirname(video_path)).lower()
+    if parent.endswith("_pre"):
+        return "pre"
+    if parent.endswith("_post"):
+        return "post"
+    return "unknown"
+
+
 def main():
-    DEFAULT_ROOT = r'C:\Users\wanglab\Desktop\Ina\PCRt_TeLC'
-    import argparse
-    import csv
-
-    parser = argparse.ArgumentParser(description='Count frames in all .mp4 videos recursively in a folder.')
-    parser.add_argument('--root', type=str, default=DEFAULT_ROOT, help='Root directory to search for videos')
-    parser.add_argument(
-        '--csv',
-        type=str,
-        default=None,
-        help='Output CSV file path (default: video_frame_counts.csv in the root folder)',
-    )
-    args = parser.parse_args()
-
-    output_csv = args.csv or os.path.join(args.root, 'video_frame_counts.csv')
-
-    video_files = sorted(find_videos(args.root))
+    video_files = find_videos(ROOT_DIR)
     if not video_files:
-        print(f'No .mp4 videos found under {args.root}')
+        print(f"No videos found in {ROOT_DIR}")
         return
 
-    print(f'Found {len(video_files)} video(s):\n')
     results = []
-    for video in video_files:
-        frames = count_frames(video)
-        video_name = os.path.basename(video)
-        if frames is not None:
-            print(f'{video_name}: {frames} frames')
-            results.append({'video_name': video_name, 'frame_count': frames})
+    for video_path in video_files:
+        video_name = os.path.basename(video_path)
+        pre_post = get_pre_post(video_path)
+        frames = count_frames(video_path)
+        if frames is None:
+            print(f"{video_name} ({pre_post}): could not open")
+            results.append((video_name, pre_post, "ERROR"))
         else:
-            print(f'{video_name}: Could not open video file')
-            results.append({'video_name': video_name, 'frame_count': 'ERROR'})
+            print(f"{video_name} ({pre_post}): {frames}")
+            results.append((video_name, pre_post, frames))
 
-    with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=['video_name', 'frame_count'])
-        writer.writeheader()
+    with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["video_name", "pre_post", "frame_count"])
         writer.writerows(results)
-    print(f'\nResults written to {output_csv}')
 
-if __name__ == '__main__':
+    print(f"\nWrote {len(results)} rows to {OUTPUT_CSV}")
+
+
+if __name__ == "__main__":
     main()
