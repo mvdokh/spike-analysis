@@ -1,7 +1,7 @@
 import csv
 import os
 
-ROOT_DIR = r"C:\Users\wanglab\Desktop\Ina\PCRt_TeLC"
+ROOT_DIR = r"H:\My Drive\Ina\PCRt_BiPoles"
 OUTPUT_CSV = os.path.join(ROOT_DIR, "behavior_csv_row_comparison.csv")
 
 
@@ -24,30 +24,34 @@ def find_behavior_csv(folder_path, view):
     return sorted(matches)[0]
 
 
-def get_pre_post(folder_name):
-    folder_name = folder_name.lower()
-    if folder_name.endswith("_pre"):
-        return "pre"
-    if folder_name.endswith("_post"):
-        return "post"
-    return "unknown"
+def find_session_folders(root_dir):
+    session_folders = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        bottom_csv = find_behavior_csv(dirpath, "bottom")
+        side_csv = find_behavior_csv(dirpath, "side")
+        if bottom_csv or side_csv:
+            session_folders.append(dirpath)
+    return sorted(session_folders)
 
 
-def get_experiment_folders(root_dir):
-    folders = []
-    for name in os.listdir(root_dir):
-        path = os.path.join(root_dir, name)
-        if os.path.isdir(path):
-            folders.append(path)
-    return sorted(folders)
+def parse_experiment_labels(folder_path):
+    rel_path = os.path.relpath(folder_path, ROOT_DIR)
+    parts = rel_path.split(os.sep)
+    animal = parts[0] if parts else ""
+    session = parts[-1] if parts else ""
+    return rel_path, animal, session
 
 
 def main():
+    session_folders = find_session_folders(ROOT_DIR)
+    if not session_folders:
+        print(f"No behavior CSV folders found in {ROOT_DIR}")
+        return
+
     results = []
 
-    for folder_path in get_experiment_folders(ROOT_DIR):
-        folder_name = os.path.basename(folder_path)
-        pre_post = get_pre_post(folder_name)
+    for folder_path in session_folders:
+        experiment, animal, session = parse_experiment_labels(folder_path)
 
         bottom_csv = find_behavior_csv(folder_path, "bottom")
         side_csv = find_behavior_csv(folder_path, "side")
@@ -61,7 +65,7 @@ def main():
             row_difference = ""
 
         print(
-            f"{folder_name} ({pre_post}): "
+            f"{experiment}: "
             f"bottom={bottom_rows if bottom_rows is not None else 'MISSING'}, "
             f"side={side_rows if side_rows is not None else 'MISSING'}, "
             f"diff={row_difference if row_difference != '' else 'N/A'}"
@@ -69,8 +73,9 @@ def main():
 
         results.append(
             (
-                folder_name,
-                pre_post,
+                experiment,
+                animal,
+                session,
                 bottom_rows if bottom_rows is not None else "MISSING",
                 side_rows if side_rows is not None else "MISSING",
                 row_difference if row_difference != "" else "N/A",
@@ -82,7 +87,8 @@ def main():
         writer.writerow(
             [
                 "experiment",
-                "pre_post",
+                "animal",
+                "session",
                 "bottom_rows",
                 "side_rows",
                 "side_minus_bottom",
