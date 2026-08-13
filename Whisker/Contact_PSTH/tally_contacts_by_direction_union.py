@@ -15,15 +15,46 @@ from pathlib import Path
 
 CONTACT_CSV = Path(
     r"H:\.shortcut-targets-by-id\1kmoeHgEh2zEhzXzXT2Xs5j6gJvKJWo7A"
-    r"\Chodl-TG-PT\B065\0925_1\contact\1\contact_c1.csv"
+    r"\Chodl-TG-PT\B065\0929_1\contact\0\contact_gamma.csv"
+
+    
 )
-DIRECTION_CSV = Path(
-    r"H:\.shortcut-targets-by-id\1kmoeHgEh2zEhzXzXT2Xs5j6gJvKJWo7A"
-    r"\Chodl-TG-PT\B065\0925_1\contact\1\direction.csv"
-)
+DIRECTION_CSV = CONTACT_CSV.parent / "direction.csv"
+
+
+def _blocks_from_frame_labels(path: Path) -> list[tuple[int, int]]:
+    """Convert frame-by-frame Contact/Nocontact labels into inclusive [start, end] blocks.
+
+    Line index i is frame i (0-based), matching contact_BLOCKS.csv.
+    """
+    blocks: list[tuple[int, int]] = []
+    start: int | None = None
+    n = 0
+    with path.open(encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            n = i + 1
+            is_contact = line.strip().lower() == "contact"
+            if is_contact:
+                if start is None:
+                    start = i
+            elif start is not None:
+                blocks.append((start, i - 1))
+                start = None
+    if start is not None and n > 0:
+        blocks.append((start, n - 1))
+    return blocks
 
 
 def load_contacts(path: Path) -> list[tuple[int, int]]:
+    """Load Start/End interval CSV, or frame-by-frame Contact/Nocontact CSV."""
+    with path.open(encoding="utf-8") as f:
+        first = f.readline().strip()
+
+    if first.lower() in {"contact", "nocontact"} or (
+        "start" not in first.lower() and "," not in first
+    ):
+        return _blocks_from_frame_labels(path)
+
     with path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return [(int(row["Start"]), int(row["End"])) for row in reader]
@@ -113,8 +144,9 @@ def main() -> None:
         )
 
     out_dir = CONTACT_CSV.parent
-    detail_path = out_dir / "contact_c1_direction_union.csv"
-    summary_path = out_dir / "contact_c1_direction_union_summary.csv"
+    stem = CONTACT_CSV.stem
+    detail_path = out_dir / f"{stem}_direction_union.csv"
+    summary_path = out_dir / f"{stem}_direction_union_summary.csv"
 
     write_csv(
         detail_path,
